@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO pricing_tables (\n                id, provider, model_name, effective_date, end_date, pricing_structure,\n                currency, region, metadata, created_at, updated_at\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "a5e4d42ce8aba363cb0ba1f3494cddbcda726b41242c6132a724f3d87c1a225f"
+}

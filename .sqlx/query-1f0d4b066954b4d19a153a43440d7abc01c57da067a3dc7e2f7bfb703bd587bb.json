@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO usage_records (\n                id, timestamp, provider, model_name, model_version, context_window,\n                organization_id, project_id, user_id, prompt_tokens, completion_tokens,\n                total_tokens, cached_tokens, reasoning_tokens, latency_ms,\n                time_to_first_token_ms, tags, metadata, ingested_at, source_type, source_metadata\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 21
+    },
+    "nullable": []
+  },
+  "hash": "1f0d4b066954b4d19a153a43440d7abc01c57da067a3dc7e2f7bfb703bd587bb"
+}

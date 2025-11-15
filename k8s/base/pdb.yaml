@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llm-cost-ops
+  labels:
+    app: llm-cost-ops
+    component: api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: llm-cost-ops
+      component: api
+  unhealthyPodEvictionPolicy: AlwaysAllow

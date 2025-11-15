@@ -1,0 +1,139 @@
+[package]
+name = "llm-cost-ops"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.91"
+authors = ["LLM DevOps Team"]
+license = "Apache-2.0"
+description = "Cost operations platform for LLM deployments"
+repository = "https://github.com/llm-devops/llm-cost-ops"
+keywords = ["llm", "cost", "operations", "monitoring"]
+categories = ["development-tools", "finance"]
+
+[dependencies]
+# Async Runtime
+tokio = { version = "1.35", features = ["full"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# CLI
+clap = { version = "4.4", features = ["derive", "env", "color"] }
+console = "0.15"
+indicatif = "0.17"
+
+# Database
+sqlx = { version = "0.7", features = [
+    "runtime-tokio-native-tls",
+    "postgres",
+    "sqlite",
+    "uuid",
+    "chrono",
+    "json",
+    "migrate"
+] }
+
+# Time & Date
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging & Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Metrics
+metrics = "0.21"
+metrics-exporter-prometheus = "0.12"
+prometheus = { version = "0.13", features = ["process"] }
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+url = "2.5"
+regex = "1.10"
+lazy_static = "1.4"
+once_cell = "1.19"
+
+# Compression
+flate2 = "1.0"
+brotli = "3.4"
+http-body-util = "0.1"
+
+# Decimal precision for currency
+rust_decimal = { version = "1.33", features = ["serde-float"] }
+
+# Configuration
+config = "0.14"
+figment = { version = "0.10", features = ["toml", "env"] }
+
+# HTTP Server & Client
+axum = { version = "0.7", features = ["json", "tokio"] }
+tower = { version = "0.4", features = ["timeout", "limit", "util"] }
+tower-http = { version = "0.5", features = ["trace", "cors", "timeout"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+hyper = { version = "1.0", features = ["server", "http1", "http2"] }
+
+# Event Streaming
+async-nats = "0.33"
+redis = { version = "0.24", features = ["tokio-comp", "streams"] }
+
+# Retry & Resilience
+backoff = { version = "0.4", features = ["tokio"] }
+deadpool = "0.10"
+
+# Validation
+validator = { version = "0.16", features = ["derive"] }
+
+# Authentication & Security
+jsonwebtoken = "9.2"
+sha2 = "0.10"
+base64 = "0.21"
+constant_time_eq = "0.3"
+rand = "0.8"
+
+# Export & Reporting
+csv = "1.3"
+rust_xlsxwriter = "0.64"
+lettre = { version = "0.11", features = ["builder", "tokio1-native-tls", "smtp-transport"] }
+handlebars = "5.1"
+mime = "0.3"
+bytes = "1.5"
+cron = "0.12"
+chrono-tz = "0.8"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3.8"
+tokio-test = "0.4"
+
+[features]
+default = ["sqlite"]
+sqlite = []
+postgres = []
+full = ["sqlite", "postgres"]
+
+[[bin]]
+name = "cost-ops"
+path = "src/bin/main.rs"
+
+[lib]
+name = "llm_cost_ops"
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 1

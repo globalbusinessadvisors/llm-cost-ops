@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO cost_records (\n                id, usage_id, timestamp, provider, model_name, input_cost, output_cost,\n                total_cost, currency, cost_model_id, pricing_structure, organization_id,\n                project_id, tags, calculated_at\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 15
+    },
+    "nullable": []
+  },
+  "hash": "a113118fc0f9b11cb747ad8c2cb2509affbb9ffbc6b5aefca3e1da4692f31262"
+}

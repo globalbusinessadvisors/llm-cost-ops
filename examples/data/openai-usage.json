@@ -1,0 +1,82 @@
+[
+  {
+    "id": "750e8400-e29b-41d4-a716-446655440001",
+    "timestamp": "2025-01-15T14:00:00Z",
+    "provider": "openai",
+    "model": {
+      "name": "gpt-4-turbo",
+      "version": "gpt-4-turbo-2024-04-09",
+      "context_window": 128000
+    },
+    "organization_id": "org-example",
+    "project_id": "proj-chatbot",
+    "user_id": "user-alice",
+    "prompt_tokens": 2500,
+    "completion_tokens": 1200,
+    "total_tokens": 3700,
+    "latency_ms": 4200,
+    "tags": ["production", "chatbot", "customer-support"],
+    "metadata": {
+      "request_id": "req-openai-001",
+      "endpoint": "/v1/chat/completions",
+      "temperature": 0.7,
+      "model_family": "gpt-4"
+    },
+    "ingested_at": "2025-01-15T14:00:01Z",
+    "source": {
+      "type": "api",
+      "endpoint": "https://api.openai.com"
+    }
+  },
+  {
+    "id": "750e8400-e29b-41d4-a716-446655440002",
+    "timestamp": "2025-01-15T14:05:00Z",
+    "provider": "openai",
+    "model": {
+      "name": "gpt-3.5-turbo",
+      "context_window": 4096
+    },
+    "organization_id": "org-example",
+    "project_id": "proj-analytics",
+    "prompt_tokens": 500,
+    "completion_tokens": 300,
+    "total_tokens": 800,
+    "latency_ms": 900,
+    "tags": ["staging", "analytics"],
+    "metadata": {
+      "request_id": "req-openai-002"
+    },
+    "ingested_at": "2025-01-15T14:05:01Z",
+    "source": {
+      "type": "api",
+      "endpoint": "https://api.openai.com"
+    }
+  },
+  {
+    "id": "750e8400-e29b-41d4-a716-446655440003",
+    "timestamp": "2025-01-15T14:10:00Z",
+    "provider": "openai",
+    "model": {
+      "name": "gpt-4",
+      "version": "gpt-4-0613",
+      "context_window": 8192
+    },
+    "organization_id": "org-example",
+    "project_id": "proj-chatbot",
+    "user_id": "user-bob",
+    "prompt_tokens": 1800,
+    "completion_tokens": 900,
+    "total_tokens": 2700,
+    "latency_ms": 3500,
+    "tags": ["production", "chatbot"],
+    "metadata": {
+      "request_id": "req-openai-003",
+      "session_id": "sess-123"
+    },
+    "ingested_at": "2025-01-15T14:10:01Z",
+    "source": {
+      "type": "api",
+      "endpoint": "https://api.openai.com"
+    }
+  }
+]

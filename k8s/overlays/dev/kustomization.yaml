@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: llm-cost-ops-dev
+
+namePrefix: dev-
+
+commonLabels:
+  environment: development
+
+bases:
+- ../../base
+
+replicas:
+- name: llm-cost-ops
+  count: 1
+
+images:
+- name: llm-cost-ops
+  newName: ghcr.io/your-org/llm-cost-ops
+  newTag: dev-latest
+
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "1Gi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "1000m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "256Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "250m"
+  target:
+    kind: Deployment
+    name: llm-cost-ops
+
+- patch: |-
+    - op: replace
+      path: /spec/minReplicas
+      value: 1
+    - op: replace
+      path: /spec/maxReplicas
+      value: 3
+  target:
+    kind: HorizontalPodAutoscaler
+    name: llm-cost-ops
+
+configMapGenerator:
+- name: llm-cost-ops-config
+  behavior: merge
+  literals:
+  - ENVIRONMENT=development
+  - LOG_LEVEL=debug
+  - TRACING_LEVEL=debug
+
+secretGenerator:
+- name: llm-cost-ops-secrets
+  behavior: merge
+  literals:
+  - DATABASE_URL=postgresql://dev_user:dev_pass@postgres-dev:5432/llm_cost_ops_dev

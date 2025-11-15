@@ -1,0 +1,74 @@
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "timestamp": "2025-01-15T10:00:00Z",
+    "provider": "openai",
+    "model": {
+      "name": "gpt-4",
+      "version": "gpt-4-0613",
+      "context_window": 8192
+    },
+    "organization_id": "org-example",
+    "project_id": "proj-123",
+    "user_id": "user-456",
+    "prompt_tokens": 1000,
+    "completion_tokens": 500,
+    "total_tokens": 1500,
+    "latency_ms": 2500,
+    "tags": ["production", "api", "customer-support"],
+    "metadata": {
+      "request_id": "req-abc123",
+      "endpoint": "/v1/chat/completions"
+    },
+    "ingested_at": "2025-01-15T10:00:01Z",
+    "source": {
+      "type": "api",
+      "endpoint": "https://api.example.com"
+    }
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440002",
+    "timestamp": "2025-01-15T10:05:00Z",
+    "provider": "anthropic",
+    "model": {
+      "name": "claude-3-sonnet",
+      "version": "20240229",
+      "context_window": 200000
+    },
+    "organization_id": "org-example",
+    "project_id": "proj-123",
+    "prompt_tokens": 2000,
+    "completion_tokens": 1000,
+    "total_tokens": 3000,
+    "cached_tokens": 1000,
+    "latency_ms": 3200,
+    "tags": ["production", "research"],
+    "metadata": {},
+    "ingested_at": "2025-01-15T10:05:01Z",
+    "source": {
+      "type": "api",
+      "endpoint": "https://api.example.com"
+    }
+  },
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440003",
+    "timestamp": "2025-01-15T10:10:00Z",
+    "provider": "openai",
+    "model": {
+      "name": "gpt-3.5-turbo",
+      "context_window": 4096
+    },
+    "organization_id": "org-example",
+    "prompt_tokens": 500,
+    "completion_tokens": 200,
+    "total_tokens": 700,
+    "latency_ms": 800,
+    "tags": ["staging", "testing"],
+    "metadata": {},
+    "ingested_at": "2025-01-15T10:10:01Z",
+    "source": {
+      "type": "api",
+      "endpoint": "https://api.example.com"
+    }
+  }
+]

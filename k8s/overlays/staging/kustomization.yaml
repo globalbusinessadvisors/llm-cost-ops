@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: llm-cost-ops-staging
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+
+bases:
+- ../../base
+
+replicas:
+- name: llm-cost-ops
+  count: 2
+
+images:
+- name: llm-cost-ops
+  newName: ghcr.io/your-org/llm-cost-ops
+  newTag: staging-latest
+
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "1.5Gi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "1500m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "384Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "350m"
+  target:
+    kind: Deployment
+    name: llm-cost-ops
+
+- patch: |-
+    - op: replace
+      path: /spec/minReplicas
+      value: 2
+    - op: replace
+      path: /spec/maxReplicas
+      value: 10
+  target:
+    kind: HorizontalPodAutoscaler
+    name: llm-cost-ops
+
+configMapGenerator:
+- name: llm-cost-ops-config
+  behavior: merge
+  literals:
+  - ENVIRONMENT=staging
+  - LOG_LEVEL=info
+  - TRACING_LEVEL=info
+
+secretGenerator:
+- name: llm-cost-ops-secrets
+  behavior: merge
+  literals:
+  - DATABASE_URL=postgresql://staging_user:staging_pass@postgres-staging:5432/llm_cost_ops_staging

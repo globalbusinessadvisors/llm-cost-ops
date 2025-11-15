@@ -1,0 +1,26 @@
+apiVersion: v2
+name: llm-cost-ops
+description: A Helm chart for LLM Cost Operations Platform
+type: application
+version: 1.0.0
+appVersion: "0.1.0"
+
+keywords:
+- llm
+- cost-tracking
+- observability
+- finops
+
+home: https://github.com/your-org/llm-cost-ops
+sources:
+- https://github.com/your-org/llm-cost-ops
+
+maintainers:
+- name: LLM DevOps Team
+  email: devops@example.com
+
+icon: https://raw.githubusercontent.com/your-org/llm-cost-ops/main/docs/logo.png
+
+annotations:
+  category: Analytics
+  licenses: Apache-2.0
