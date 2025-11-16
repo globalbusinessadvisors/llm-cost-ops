@@ -11,6 +11,30 @@
 ![TypeScript Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/typescript-version.svg)
 ![Rust Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/rust-version.svg)
 
+## SDK Status
+## SDK Status
+
+### Build Status
+![Python Build](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/python-build.svg)
+![TypeScript Build](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/typescript-build.svg)
+![Rust Build](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/rust-build.svg)
+
+### Version
+![Python Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/python-version.svg)
+![TypeScript Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/typescript-version.svg)
+![Rust Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/rust-version.svg)
+
+
+### Build Status
+![Python Build](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/python-build.svg)
+![TypeScript Build](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/typescript-build.svg)
+![Rust Build](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/rust-build.svg)
+
+### Version
+![Python Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/python-version.svg)
+![TypeScript Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/typescript-version.svg)
+![Rust Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/rust-version.svg)
+
 ## Features
 
 ### Core Capabilities
