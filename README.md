@@ -1,4 +1,5 @@
 ## SDK Status
+## SDK Status
 
 ### Build Status
 ![Python Build](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/python-build.svg)
@@ -9,14 +10,6 @@
 ![Python Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/python-version.svg)
 ![TypeScript Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/typescript-version.svg)
 ![Rust Version](https://github.com/globalbusinessadvisors/llm-cost-ops/blob/main/.github/badges/rust-version.svg)
-
-# LLM-CostOps
-
-Enterprise-grade cost operations platform for LLM infrastructure. Track, analyze, and optimize costs across multiple LLM providers with production-ready accuracy and comprehensive compliance.
-
-[![Tests](https://img.shields.io/badge/tests-554%2B%20passing-success)](https://github.com/yourusername/llm-cost-ops)
-[![Coverage](https://img.shields.io/badge/coverage-90%25%2B-brightgreen)](https://github.com/yourusername/llm-cost-ops)
-[![License](https://img.shields.io/badge/license-Apache%202.0%20%2F%20MIT-blue)](LICENSE)
 
 ## Features
 
