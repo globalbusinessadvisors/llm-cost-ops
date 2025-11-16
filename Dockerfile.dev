@@ -2,7 +2,7 @@
 # Includes development tools and hot-reload support
 # Version: 1.0.0
 
-FROM rust:1.75-bullseye
+FROM rust:1.91-bullseye
 
 # Install development dependencies
 RUN apt-get update && apt-get install -y \
