@@ -1,10 +1,9 @@
 use anyhow::Result;
 use chrono::Utc;
-use clap::Parser;
 use llm_cost_ops::{
     cli::{Cli, Commands, PricingCommands},
     config::Config,
-    domain::{ModelIdentifier, PricingStructure, PricingTable, Provider, UsageRecord},
+    domain::{PricingStructure, PricingTable, Provider, UsageRecord},
     engine::{CostAggregator, CostCalculator},
     storage::{CostRepository, PricingRepository, UsageRepository},
 };

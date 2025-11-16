@@ -5,7 +5,6 @@ edition = "2021"
 rust-version = "1.91"
 authors = ["LLM DevOps Team"]
 license = "Apache-2.0"
-license-file = "LICENSE"
 description = "Cost operations platform for LLM deployments"
 readme = "README-crates.md"
 repository = "https://github.com/globalbusinessadvisors/llm-cost-ops"
@@ -13,6 +12,24 @@ homepage = "https://github.com/globalbusinessadvisors/llm-cost-ops"
 documentation = "https://docs.rs/llm-cost-ops"
 keywords = ["llm", "cost", "operations", "monitoring"]
 categories = ["development-tools", "finance"]
+exclude = [
+    "node_modules/",
+    "website/",
+    "docs/",
+    ".github/",
+    ".claude-flow/",
+    "deployment/",
+    "sdk/",
+    "tests/",
+    "benches/",
+    "*.md",
+    "!README-crates.md",
+    "*.yml",
+    "*.yaml",
+    "*.json",
+    "*.toml",
+    "!Cargo.toml",
+]
 
 [dependencies]
 # Async Runtime
