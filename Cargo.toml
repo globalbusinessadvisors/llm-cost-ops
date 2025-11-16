@@ -19,7 +19,6 @@ exclude = [
     ".github/",
     ".claude-flow/",
     "deployment/",
-    "sdk/",
     "tests/",
     "benches/",
     "*.md",
