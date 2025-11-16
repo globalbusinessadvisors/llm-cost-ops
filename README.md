@@ -2157,11 +2157,11 @@ export SMTP_PASSWORD=your-smtp-password
 
 ### Docker Deployment
 
-See the included `Dockerfile` for production-ready multi-stage builds:
+See the included `deployment/Dockerfile` for production-ready multi-stage builds:
 
 ```bash
 # Build Docker image
-docker build -t llm-cost-ops:latest .
+docker build -f deployment/Dockerfile -t llm-cost-ops:latest .
 
 # Run container
 docker run -d \
@@ -2170,6 +2170,16 @@ docker run -d \
   -v /data:/app/data \
   -e DATABASE_URL=sqlite:///app/data/llm-cost-ops.db \
   llm-cost-ops:latest
+
+# Using Docker Compose (recommended)
+cd deployment
+docker-compose up -d
+
+# Production deployment
+docker-compose -f deployment/docker-compose.prod.yml up -d
+
+# Testing environment
+docker-compose -f deployment/docker-compose.test.yml up -d
 ```
 
 ## Kubernetes Deployment
