@@ -1,0 +1,262 @@
+name: TypeScript SDK - CI/CD
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+    paths:
+      - 'sdks/typescript/**'
+      - '.github/workflows/sdk/typescript-sdk.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'sdks/typescript/**'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  WORKING_DIR: 'sdks/typescript'
+
+jobs:
+  # Test matrix across multiple Node.js versions
+  test:
+    name: Test TypeScript SDK
+    if: github.event_name != 'release'
+    uses: ./.github/workflows/reusable/test-matrix.yml
+    with:
+      language: typescript
+      test-command: 'npm test'
+      working-directory: 'sdks/typescript'
+      matrix-os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+      matrix-versions: '["18", "20", "21"]'
+      coverage-enabled: true
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Code quality
+  quality:
+    name: Code Quality
+    uses: ./.github/workflows/reusable/lint-quality.yml
+    with:
+      language: typescript
+      working-directory: 'sdks/typescript'
+
+  # Security scanning
+  security:
+    name: Security Scan
+    uses: ./.github/workflows/reusable/security-scan.yml
+    with:
+      language: typescript
+      working-directory: 'sdks/typescript'
+      enable-codeql: true
+      enable-sast: true
+      enable-dependency-scan: true
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  # Type checking
+  type-check:
+    name: TypeScript Type Checking
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '${{ env.WORKING_DIR }}/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Type check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npx tsc --noEmit
+
+      - name: Check for type errors
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npx tsc --noEmit --pretty false | tee type-errors.txt
+
+      - name: Upload type check results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-type-errors
+          path: ${{ env.WORKING_DIR }}/type-errors.txt
+
+  # Build package
+  build:
+    name: Build Package
+    needs: [test, quality]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Build
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-sdk-build
+          path: |
+            ${{ env.WORKING_DIR }}/dist/
+            ${{ env.WORKING_DIR }}/lib/
+          retention-days: 30
+
+  # E2E tests
+  e2e-tests:
+    name: E2E Tests
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: typescript-sdk-build
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Run E2E tests
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          LLM_COST_OPS_API_KEY: ${{ secrets.LLM_COST_OPS_TEST_API_KEY }}
+          LLM_COST_OPS_BASE_URL: ${{ secrets.LLM_COST_OPS_TEST_BASE_URL }}
+        run: npm run test:e2e || npm run test:integration
+
+  # Documentation generation
+  docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Generate API docs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          npm install -g typedoc
+          npx typedoc --out docs src
+
+      - name: Upload docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-sdk-docs
+          path: ${{ env.WORKING_DIR }}/docs
+          retention-days: 30
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ env.WORKING_DIR }}/docs
+          destination_dir: sdk/typescript
+
+  # Bundle size check
+  bundle-size:
+    name: Check Bundle Size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm ci
+
+      - name: Build
+        working-directory: ${{ env.WORKING_DIR }}
+        run: npm run build
+
+      - name: Check bundle size
+        uses: andresz1/size-limit-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          directory: ${{ env.WORKING_DIR }}
+
+  # Release automation
+  release:
+    name: Create Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]')
+    needs: [test, quality, security, build, e2e-tests]
+    uses: ./.github/workflows/reusable/release-automation.yml
+    with:
+      language: typescript
+      working-directory: 'sdks/typescript'
+      version-bump: 'auto'
+      changelog-generate: true
+      create-github-release: true
+      trigger-publish: true
+
+  # Publish to NPM
+  publish:
+    name: Publish to NPM
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: [test, quality, security, build]
+    uses: ./.github/workflows/reusable/publish-package.yml
+    with:
+      language: typescript
+      working-directory: 'sdks/typescript'
+      package-name: '@llm-cost-ops/sdk'
+      dry-run: false
+      pre-publish-command: 'npm run build'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # Notification
+  notify:
+    name: Notify
+    needs: [test, quality, security, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create summary
+        run: |
+          echo "# TypeScript SDK CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Test: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Quality: ${{ needs.quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY

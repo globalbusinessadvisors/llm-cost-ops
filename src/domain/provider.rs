@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -42,7 +43,7 @@ impl Provider {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "openai" => Provider::OpenAI,
             "anthropic" => Provider::Anthropic,
@@ -79,16 +80,33 @@ impl fmt::Display for Provider {
     }
 }
 
+impl FromStr for Provider {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.to_lowercase().as_str() {
+            "openai" => Provider::OpenAI,
+            "anthropic" => Provider::Anthropic,
+            "google" | "vertex" => Provider::GoogleVertexAI,
+            "azure" => Provider::AzureOpenAI,
+            "aws" | "bedrock" => Provider::AWSBedrock,
+            "cohere" => Provider::Cohere,
+            "mistral" => Provider::Mistral,
+            other => Provider::Custom(other.to_string()),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_provider_parsing() {
-        assert_eq!(Provider::from_str("OpenAI"), Provider::OpenAI);
-        assert_eq!(Provider::from_str("openai"), Provider::OpenAI);
-        assert_eq!(Provider::from_str("anthropic"), Provider::Anthropic);
-        assert_eq!(Provider::from_str("custom-provider"), Provider::Custom("custom-provider".to_string()));
+        assert_eq!(Provider::from_str("OpenAI"), Ok(Provider::OpenAI));
+        assert_eq!(Provider::from_str("openai"), Ok(Provider::OpenAI));
+        assert_eq!(Provider::from_str("anthropic"), Ok(Provider::Anthropic));
+        assert_eq!(Provider::from_str("custom-provider"), Ok(Provider::Custom("custom-provider".to_string())));
     }
 
     #[test]

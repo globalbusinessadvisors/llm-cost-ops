@@ -1,0 +1,117 @@
+# Alertmanager configuration for LLM Cost Ops - Production
+# Version: 1.0.0
+
+global:
+  resolve_timeout: 5m
+  smtp_from: 'alertmanager@llm-cost-ops.com'
+  smtp_smarthost: '${SMTP_HOST}:${SMTP_PORT}'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+# Template files
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route tree
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 1h
+
+    # High severity alerts
+    - match:
+        severity: high
+      receiver: 'high-severity'
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+
+    # Medium severity alerts
+    - match:
+        severity: medium
+      receiver: 'medium-severity'
+      group_wait: 5m
+      group_interval: 30m
+      repeat_interval: 12h
+
+    # Database alerts
+    - match:
+        team: database
+      receiver: 'database-team'
+
+    # Security alerts
+    - match:
+        team: security
+      receiver: 'security-team'
+      continue: true
+
+# Inhibition rules
+inhibit_rules:
+  # Inhibit all other alerts if all instances are down
+  - source_match:
+      alertname: 'AllApplicationInstancesDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['cluster']
+
+  # Inhibit warning if critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+# Receivers
+receivers:
+  - name: 'default'
+    email_configs:
+      - to: 'alerts@llm-cost-ops.com'
+        headers:
+          Subject: '[LLM Cost Ops] {{ .GroupLabels.alertname }}'
+
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'oncall@llm-cost-ops.com'
+        headers:
+          Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+    # webhook_configs:
+    #   - url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+    # pagerduty_configs:
+    #   - service_key: 'YOUR_PAGERDUTY_KEY'
+
+  - name: 'high-severity'
+    email_configs:
+      - to: 'platform-team@llm-cost-ops.com'
+        headers:
+          Subject: '[HIGH] {{ .GroupLabels.alertname }}'
+
+  - name: 'medium-severity'
+    email_configs:
+      - to: 'monitoring@llm-cost-ops.com'
+        headers:
+          Subject: '[MEDIUM] {{ .GroupLabels.alertname }}'
+
+  - name: 'database-team'
+    email_configs:
+      - to: 'database-team@llm-cost-ops.com'
+        headers:
+          Subject: '[Database] {{ .GroupLabels.alertname }}'
+
+  - name: 'security-team'
+    email_configs:
+      - to: 'security@llm-cost-ops.com'
+        headers:
+          Subject: '[Security Alert] {{ .GroupLabels.alertname }}'

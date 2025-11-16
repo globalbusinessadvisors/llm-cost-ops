@@ -1,0 +1,360 @@
+name: TypeScript SDK - Release
+
+on:
+  push:
+    tags:
+      - 'v*-typescript'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+      dry-run:
+        description: 'Dry run (skip publishing)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+defaults:
+  run:
+    working-directory: ./sdk
+
+jobs:
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            TAG="v${VERSION}-typescript"
+          else
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+            VERSION="${VERSION%-typescript}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+          echo "Tag: ${TAG}"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Invalid version format: $VERSION"
+            exit 1
+          fi
+
+      - name: Check if version exists in package.json
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_VERSION="${{ steps.version.outputs.version }}"
+          echo "Package.json version: $PKG_VERSION"
+          echo "Release version: $RELEASE_VERSION"
+          if [[ "$PKG_VERSION" != "$RELEASE_VERSION" ]]; then
+            echo "::error::Version mismatch! package.json has $PKG_VERSION but releasing $RELEASE_VERSION"
+            exit 1
+          fi
+
+  test-and-build:
+    name: Test & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Type checking
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test:coverage
+        env:
+          NODE_ENV: production
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify build outputs
+        run: |
+          test -f dist/index.js || (echo "CJS build missing" && exit 1)
+          test -f dist/index.mjs || (echo "ESM build missing" && exit 1)
+          test -f dist/index.d.ts || (echo "Type declarations missing" && exit 1)
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build
+          path: sdk/dist/
+          retention-days: 30
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --production --audit-level=high
+
+      - name: Check for vulnerable dependencies
+        run: |
+          AUDIT_RESULT=$(npm audit --production --json)
+          CRITICAL=$(echo $AUDIT_RESULT | jq '.metadata.vulnerabilities.critical // 0')
+          HIGH=$(echo $AUDIT_RESULT | jq '.metadata.vulnerabilities.high // 0')
+
+          if [[ $CRITICAL -gt 0 ]] || [[ $HIGH -gt 0 ]]; then
+            echo "::error::Found $CRITICAL critical and $HIGH high severity vulnerabilities"
+            echo "$AUDIT_RESULT" | jq '.vulnerabilities'
+            exit 1
+          fi
+
+      - name: License compliance check
+        run: |
+          echo "Checking license compliance..."
+          npx license-checker --summary --production --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense" || true
+
+  generate-docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test-and-build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install TypeDoc
+        run: npm install --no-save typedoc
+
+      - name: Generate API documentation
+        run: npx typedoc --out docs/api src/index.ts --readme README.md --plugin typedoc-plugin-markdown || npx typedoc --out docs/api src/index.ts --readme README.md
+
+      - name: Archive documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: sdk/docs/api/
+          retention-days: 30
+
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [validate, test-and-build, security-scan]
+    if: github.event.inputs.dry-run != 'true'
+    environment:
+      name: npm-production
+      url: https://www.npmjs.com/package/@llm-cost-ops/sdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Check if version already published
+        id: check-version
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          if npm view @llm-cost-ops/sdk@$VERSION version 2>/dev/null; then
+            echo "Version $VERSION already published"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version $VERSION not yet published"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npm with provenance
+        if: steps.check-version.outputs.exists == 'false'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Verify publication
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          sleep 10  # Wait for npm registry to update
+          npm view @llm-cost-ops/sdk@$VERSION version
+
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [validate, publish-npm, generate-docs]
+    if: always() && needs.validate.result == 'success' && (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped')
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-build
+          path: sdk/dist
+
+      - name: Download documentation
+        uses: actions/download-artifact@v4
+        with:
+          name: api-documentation
+          path: sdk/docs/api
+        continue-on-error: true
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          TAG="${{ needs.validate.outputs.tag }}"
+
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 ${TAG}^ 2>/dev/null || echo "")
+
+          if [[ -n "$PREV_TAG" ]]; then
+            echo "Generating changelog from $PREV_TAG to $TAG"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" $PREV_TAG..$TAG -- sdk/)
+          else
+            echo "No previous tag found, using last 10 commits"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" -10 -- sdk/)
+          fi
+
+          # Create changelog file
+          cat > /tmp/changelog.md << EOF
+          # TypeScript SDK v${VERSION}
+
+          ## What's Changed
+
+          ${CHANGELOG}
+
+          ## Installation
+
+          \`\`\`bash
+          npm install @llm-cost-ops/sdk@${VERSION}
+          \`\`\`
+
+          ## Documentation
+
+          - [npm package](https://www.npmjs.com/package/@llm-cost-ops/sdk)
+          - [API Documentation](https://github.com/${{ github.repository }}/tree/$TAG/sdk)
+
+          ---
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG}
+          EOF
+
+          cat /tmp/changelog.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate.outputs.tag }}
+          name: TypeScript SDK v${{ needs.validate.outputs.version }}
+          body_path: /tmp/changelog.md
+          draft: false
+          prerelease: ${{ contains(needs.validate.outputs.version, '-') }}
+          files: |
+            sdk/dist/**/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add release summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # 🚀 TypeScript SDK Release Complete
+
+          **Version:** ${{ needs.validate.outputs.version }}
+          **Tag:** ${{ needs.validate.outputs.tag }}
+          **npm:** https://www.npmjs.com/package/@llm-cost-ops/sdk/v/${{ needs.validate.outputs.version }}
+
+          ## Installation
+
+          \`\`\`bash
+          npm install @llm-cost-ops/sdk@${{ needs.validate.outputs.version }}
+          \`\`\`
+          EOF
+
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [validate, test-and-build, security-scan, publish-npm, create-github-release]
+    steps:
+      - name: Report failure
+        run: |
+          echo "::error::Release workflow failed for version ${{ needs.validate.outputs.version }}"
+          echo "Please check the workflow logs for details."

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use super::api_key::{ApiKeyHash, validate_api_key_format};
+use super::api_key::{ApiKeyHash, validate_api_key_format, hash_api_key};
 use super::{AuthError, AuthResult};
 
 /// Trait for API key storage backends
@@ -79,9 +79,14 @@ impl ApiKeyStore for InMemoryApiKeyStore {
 
     async fn get_by_key(&self, raw_key: &str) -> AuthResult<Option<ApiKeyHash>> {
         let keys = self.keys.read().await;
+        let candidate_hash = hash_api_key(raw_key);
 
         for key_hash in keys.values() {
-            if key_hash.verify(raw_key) {
+            // Compare hashes only, don't check revocation/expiration status here
+            if constant_time_eq::constant_time_eq(
+                key_hash.key_hash.as_bytes(),
+                candidate_hash.as_bytes(),
+            ) {
                 return Ok(Some(key_hash.clone()));
             }
         }

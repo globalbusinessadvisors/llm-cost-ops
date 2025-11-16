@@ -1,0 +1,190 @@
+# Prometheus Alert Rules for LLM Cost Ops - Production
+# Version: 1.0.0
+
+groups:
+  # Critical Application Alerts
+  - name: critical_alerts
+    interval: 15s
+    rules:
+      - alert: ApplicationInstanceDown
+        expr: up{job="llm-cost-ops-app"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Critical: Application instance down"
+          description: "Application instance {{ $labels.instance }} is down. Immediate action required."
+          runbook_url: "https://docs.llm-cost-ops/runbooks/app-down"
+
+      - alert: AllApplicationInstancesDown
+        expr: count(up{job="llm-cost-ops-app"} == 1) == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: platform
+          page: true
+        annotations:
+          summary: "CRITICAL: All application instances are down"
+          description: "Complete service outage. All application instances are down."
+
+      - alert: DatabasePrimaryDown
+        expr: up{job="postgres",instance="postgres-primary:5432"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: database
+          page: true
+        annotations:
+          summary: "Critical: Primary database is down"
+          description: "Primary PostgreSQL database is down. Failover may be required."
+
+  # High Severity Alerts
+  - name: high_severity_alerts
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: high
+          team: platform
+        annotations:
+          summary: "High server error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+
+      - alert: APILatencyHigh
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: high
+          team: platform
+        annotations:
+          summary: "API response time degraded"
+          description: "95th percentile latency is {{ $value }}s (threshold: 2s)"
+
+      - alert: DatabaseReplicationLag
+        expr: pg_replication_lag > 10
+        for: 5m
+        labels:
+          severity: high
+          team: database
+        annotations:
+          summary: "Database replication lag is high"
+          description: "Replication lag is {{ $value }}s on replica"
+
+  # Medium Severity Alerts
+  - name: medium_severity_alerts
+    interval: 1m
+    rules:
+      - alert: HighMemoryUsage
+        expr: (process_resident_memory_bytes / 4294967296) > 0.8
+        for: 10m
+        labels:
+          severity: medium
+          team: platform
+        annotations:
+          summary: "High memory usage"
+          description: "{{ $labels.instance }} is using {{ $value | humanizePercentage }} of available memory"
+
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: medium
+          team: platform
+        annotations:
+          summary: "High CPU usage"
+          description: "{{ $labels.instance }} CPU usage is {{ $value | humanizePercentage }}"
+
+      - alert: DiskSpaceRunningLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.2
+        for: 10m
+        labels:
+          severity: medium
+          team: infrastructure
+        annotations:
+          summary: "Disk space running low"
+          description: "Disk {{ $labels.device }} has {{ $value | humanizePercentage }} free space"
+
+  # Cache and Message Queue Alerts
+  - name: infrastructure_alerts
+    interval: 1m
+    rules:
+      - alert: RedisMasterDown
+        expr: up{job="redis",instance="redis-master:6379"} == 0
+        for: 1m
+        labels:
+          severity: high
+          team: platform
+        annotations:
+          summary: "Redis master is down"
+          description: "Redis master node is unavailable. Check sentinel for failover."
+
+      - alert: HighCacheEvictionRate
+        expr: rate(redis_evicted_keys_total[5m]) > 1000
+        for: 5m
+        labels:
+          severity: medium
+          team: platform
+        annotations:
+          summary: "High cache eviction rate"
+          description: "Redis is evicting {{ $value }} keys/s. Consider increasing memory."
+
+      - alert: NatsClusterNodeDown
+        expr: count(up{job="nats"} == 1) < 2
+        for: 2m
+        labels:
+          severity: high
+          team: platform
+        annotations:
+          summary: "NATS cluster degraded"
+          description: "Only {{ $value }} NATS nodes are running (expected: 3)"
+
+  # Business Metrics Alerts
+  - name: business_metrics_alerts
+    interval: 5m
+    rules:
+      - alert: HighCostProcessingFailureRate
+        expr: rate(cost_calculation_errors_total[10m]) > 0.05
+        for: 10m
+        labels:
+          severity: high
+          team: platform
+        annotations:
+          summary: "High cost calculation failure rate"
+          description: "Cost calculation errors at {{ $value }}/s"
+
+      - alert: AnomalousRequestVolume
+        expr: abs(rate(http_requests_total[5m]) - rate(http_requests_total[5m] offset 1h)) / rate(http_requests_total[5m] offset 1h) > 0.5
+        for: 10m
+        labels:
+          severity: medium
+          team: platform
+        annotations:
+          summary: "Anomalous request volume"
+          description: "Request volume changed by {{ $value | humanizePercentage }} compared to 1h ago"
+
+  # Security Alerts
+  - name: security_alerts
+    interval: 1m
+    rules:
+      - alert: HighAuthenticationFailureRate
+        expr: rate(authentication_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: high
+          team: security
+        annotations:
+          summary: "High authentication failure rate"
+          description: "{{ $value }} authentication failures per second detected"
+
+      - alert: UnauthorizedAccessAttempts
+        expr: rate(http_requests_total{status="403"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: medium
+          team: security
+        annotations:
+          summary: "Elevated unauthorized access attempts"
+          description: "{{ $value }} unauthorized access attempts per second"

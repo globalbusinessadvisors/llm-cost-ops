@@ -1,0 +1,74 @@
+# Prometheus configuration for LLM Cost Ops - Production
+# Version: 1.0.0
+
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+  external_labels:
+    cluster: 'llm-cost-ops-prod'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+      timeout: 10s
+      api_version: v2
+
+# Load rules
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # LLM Cost Ops Applications (multiple instances)
+  - job_name: 'llm-cost-ops-app'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - 'app-1:9090'
+          - 'app-2:9090'
+        labels:
+          service: 'llm-cost-ops'
+
+  # NATS Cluster
+  - job_name: 'nats'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - 'nats-1:8222'
+          - 'nats-2:8222'
+          - 'nats-3:8222'
+        labels:
+          service: 'nats'
+
+  # Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+
+  # Jaeger
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+        labels:
+          service: 'jaeger'
+
+  # Nginx
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:9113']
+        labels:
+          service: 'nginx'

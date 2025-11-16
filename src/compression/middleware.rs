@@ -351,11 +351,14 @@ pub async fn compression_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CompressionLevel;
     use axum::{routing::get, Router};
     use tower::ServiceExt;
 
-    async fn test_handler() -> &'static str {
-        "Hello, World! This is a test response that should be compressed."
+    async fn test_handler() -> ([(header::HeaderName, &'static str); 1], &'static str) {
+        ([
+            (header::CONTENT_TYPE, "text/plain"),
+        ], "Hello, World! This is a test response that should be compressed. Adding more text to ensure it compresses well and the compressed size is smaller than the original.")
     }
 
     #[tokio::test]

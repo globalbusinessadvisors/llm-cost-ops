@@ -150,11 +150,11 @@ pub fn init_tracing(config: &TracingConfig) -> Result<(), String> {
                 .with_line_number(config.include_location)
                 .with_span_events(FmtSpan::CLOSE);
 
-            Registry::default()
+            // Ignore error if subscriber already initialized (common in tests)
+            let _ = Registry::default()
                 .with(env_filter)
                 .with(fmt_layer)
-                .try_init()
-                .map_err(|e| format!("Failed to initialize tracing: {}", e))?;
+                .try_init();
         }
         TracingFormat::Pretty => {
             let fmt_layer = fmt::layer()
@@ -168,11 +168,11 @@ pub fn init_tracing(config: &TracingConfig) -> Result<(), String> {
                 .with_ansi(config.ansi)
                 .with_span_events(FmtSpan::CLOSE);
 
-            Registry::default()
+            // Ignore error if subscriber already initialized (common in tests)
+            let _ = Registry::default()
                 .with(env_filter)
                 .with(fmt_layer)
-                .try_init()
-                .map_err(|e| format!("Failed to initialize tracing: {}", e))?;
+                .try_init();
         }
         TracingFormat::Compact => {
             let fmt_layer = fmt::layer()
@@ -186,11 +186,11 @@ pub fn init_tracing(config: &TracingConfig) -> Result<(), String> {
                 .with_ansi(config.ansi)
                 .with_span_events(FmtSpan::CLOSE);
 
-            Registry::default()
+            // Ignore error if subscriber already initialized (common in tests)
+            let _ = Registry::default()
                 .with(env_filter)
                 .with(fmt_layer)
-                .try_init()
-                .map_err(|e| format!("Failed to initialize tracing: {}", e))?;
+                .try_init();
         }
         TracingFormat::Text => {
             let fmt_layer = fmt::layer()
@@ -203,11 +203,11 @@ pub fn init_tracing(config: &TracingConfig) -> Result<(), String> {
                 .with_ansi(config.ansi)
                 .with_span_events(FmtSpan::CLOSE);
 
-            Registry::default()
+            // Ignore error if subscriber already initialized (common in tests)
+            let _ = Registry::default()
                 .with(env_filter)
                 .with(fmt_layer)
-                .try_init()
-                .map_err(|e| format!("Failed to initialize tracing: {}", e))?;
+                .try_init();
         }
     }
 

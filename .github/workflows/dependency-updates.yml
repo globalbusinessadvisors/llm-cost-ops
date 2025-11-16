@@ -1,0 +1,471 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      sdk:
+        description: 'SDK to update (all, python, typescript, rust, go, java)'
+        required: false
+        type: choice
+        options:
+          - all
+          - python
+          - typescript
+          - rust
+          - go
+          - java
+        default: all
+      auto-merge-patch:
+        description: 'Auto-merge patch updates'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  detect-sdks:
+    name: Detect SDKs to Update
+    runs-on: ubuntu-latest
+    outputs:
+      sdks: ${{ steps.detect.outputs.sdks }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect SDKs
+        id: detect
+        run: |
+          SDKS='[]'
+          INPUT_SDK="${{ inputs.sdk || 'all' }}"
+
+          if [ "$INPUT_SDK" = "all" ]; then
+            # Detect all SDKs
+            AVAILABLE_SDKS=()
+
+            [ -d "sdks/python" ] && AVAILABLE_SDKS+=("python")
+            [ -d "sdks/typescript" ] && AVAILABLE_SDKS+=("typescript")
+            [ -d "sdks/rust" ] && AVAILABLE_SDKS+=("rust")
+            [ -d "sdks/go" ] && AVAILABLE_SDKS+=("go")
+            [ -d "sdks/java" ] && AVAILABLE_SDKS+=("java")
+
+            # Convert to JSON array
+            SDKS=$(printf '%s\n' "${AVAILABLE_SDKS[@]}" | jq -R . | jq -s .)
+          else
+            SDKS='["${{ inputs.sdk }}"]'
+          fi
+
+          echo "sdks=$SDKS" >> $GITHUB_OUTPUT
+          echo "Detected SDKs: $SDKS"
+
+  update-python:
+    name: Update Python Dependencies
+    needs: detect-sdks
+    if: contains(needs.detect-sdks.outputs.sdks, 'python')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pip-tools
+        run: pip install pip-tools pip-audit safety
+
+      - name: Update dependencies
+        working-directory: sdks/python
+        run: |
+          # Update requirements
+          if [ -f "requirements.in" ]; then
+            pip-compile --upgrade requirements.in
+          fi
+
+          if [ -f "requirements-dev.in" ]; then
+            pip-compile --upgrade requirements-dev.in
+          fi
+
+          # Update pyproject.toml dependencies
+          pip install --upgrade pip setuptools wheel
+
+      - name: Check for security vulnerabilities
+        working-directory: sdks/python
+        run: |
+          pip-audit --format json --output pip-audit.json || true
+          safety check --json --output safety.json || true
+
+      - name: Extract update info
+        id: updates
+        working-directory: sdks/python
+        run: |
+          # Determine if updates are available
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "has-updates=true" >> $GITHUB_OUTPUT
+
+            # Count security fixes
+            SECURITY_COUNT=0
+            if [ -f "pip-audit.json" ]; then
+              SECURITY_COUNT=$(jq '.vulnerabilities | length' pip-audit.json)
+            fi
+            echo "security-count=$SECURITY_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "has-updates=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.updates.outputs.has-updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(python): update dependencies'
+          branch: deps/python-updates-${{ github.run_number }}
+          title: '[Python] Dependency Updates'
+          body: |
+            ## Python Dependency Updates
+
+            This PR updates Python dependencies to their latest versions.
+
+            ### Security Fixes
+            - Security vulnerabilities fixed: ${{ steps.updates.outputs.security-count }}
+
+            ### Testing
+            - [ ] All tests pass
+            - [ ] Security scans clean
+            - [ ] Manual verification complete
+
+            ---
+            *Automated by dependency-updates workflow*
+          labels: |
+            dependencies
+            python
+            automated
+          assignees: ${{ github.repository_owner }}
+
+  update-typescript:
+    name: Update TypeScript Dependencies
+    needs: detect-sdks
+    if: contains(needs.detect-sdks.outputs.sdks, 'typescript')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Update dependencies
+        working-directory: sdks/typescript
+        run: |
+          # Install npm-check-updates
+          npm install -g npm-check-updates
+
+          # Update package.json
+          ncu -u
+
+          # Install updated dependencies
+          npm install
+
+      - name: Run security audit
+        working-directory: sdks/typescript
+        run: |
+          npm audit --json > npm-audit.json || true
+          npx audit-ci --config audit-ci.json || true
+
+      - name: Extract update info
+        id: updates
+        working-directory: sdks/typescript
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "has-updates=true" >> $GITHUB_OUTPUT
+
+            # Count security fixes
+            SECURITY_COUNT=0
+            if [ -f "npm-audit.json" ]; then
+              SECURITY_COUNT=$(jq '.metadata.vulnerabilities.total' npm-audit.json)
+            fi
+            echo "security-count=$SECURITY_COUNT" >> $GITHUB_OUTPUT
+
+            # Determine update type
+            if git diff package.json | grep -q '"version".*"[0-9]*\.[0-9]*\.'; then
+              echo "update-type=patch" >> $GITHUB_OUTPUT
+            elif git diff package.json | grep -q '"version".*"[0-9]*\.'; then
+              echo "update-type=minor" >> $GITHUB_OUTPUT
+            else
+              echo "update-type=major" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "has-updates=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.updates.outputs.has-updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(typescript): update dependencies'
+          branch: deps/typescript-updates-${{ github.run_number }}
+          title: '[TypeScript] Dependency Updates'
+          body: |
+            ## TypeScript Dependency Updates
+
+            This PR updates TypeScript dependencies to their latest versions.
+
+            ### Update Type
+            - Type: ${{ steps.updates.outputs.update-type }}
+
+            ### Security Fixes
+            - Security vulnerabilities fixed: ${{ steps.updates.outputs.security-count }}
+
+            ### Testing
+            - [ ] All tests pass
+            - [ ] Security scans clean
+            - [ ] Manual verification complete
+
+            ---
+            *Automated by dependency-updates workflow*
+          labels: |
+            dependencies
+            typescript
+            automated
+            ${{ steps.updates.outputs.update-type }}
+          assignees: ${{ github.repository_owner }}
+
+  update-rust:
+    name: Update Rust Dependencies
+    needs: detect-sdks
+    if: contains(needs.detect-sdks.outputs.sdks, 'rust')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install cargo tools
+        run: |
+          cargo install cargo-edit cargo-audit cargo-outdated
+
+      - name: Update dependencies
+        working-directory: sdks/rust
+        run: |
+          # Update Cargo.toml
+          cargo upgrade --incompatible
+
+          # Update Cargo.lock
+          cargo update
+
+      - name: Run security audit
+        working-directory: sdks/rust
+        run: |
+          cargo audit --json > cargo-audit.json || true
+
+      - name: Extract update info
+        id: updates
+        working-directory: sdks/rust
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "has-updates=true" >> $GITHUB_OUTPUT
+
+            # Count security fixes
+            SECURITY_COUNT=0
+            if [ -f "cargo-audit.json" ]; then
+              SECURITY_COUNT=$(jq '.vulnerabilities.found | length' cargo-audit.json)
+            fi
+            echo "security-count=$SECURITY_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "has-updates=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.updates.outputs.has-updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(rust): update dependencies'
+          branch: deps/rust-updates-${{ github.run_number }}
+          title: '[Rust] Dependency Updates'
+          body: |
+            ## Rust Dependency Updates
+
+            This PR updates Rust dependencies to their latest versions.
+
+            ### Security Fixes
+            - Security vulnerabilities fixed: ${{ steps.updates.outputs.security-count }}
+
+            ### Testing
+            - [ ] All tests pass
+            - [ ] Security scans clean
+            - [ ] Manual verification complete
+
+            ---
+            *Automated by dependency-updates workflow*
+          labels: |
+            dependencies
+            rust
+            automated
+          assignees: ${{ github.repository_owner }}
+
+  update-go:
+    name: Update Go Dependencies
+    needs: detect-sdks
+    if: contains(needs.detect-sdks.outputs.sdks, 'go')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Update dependencies
+        working-directory: sdks/go
+        run: |
+          # Update all dependencies
+          go get -u ./...
+          go mod tidy
+
+      - name: Run security check
+        working-directory: sdks/go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck -json ./... > govulncheck.json || true
+
+      - name: Extract update info
+        id: updates
+        working-directory: sdks/go
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "has-updates=true" >> $GITHUB_OUTPUT
+
+            # Count security fixes
+            SECURITY_COUNT=0
+            if [ -f "govulncheck.json" ]; then
+              SECURITY_COUNT=$(jq '[.Vulns] | length' govulncheck.json)
+            fi
+            echo "security-count=$SECURITY_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "has-updates=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.updates.outputs.has-updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(go): update dependencies'
+          branch: deps/go-updates-${{ github.run_number }}
+          title: '[Go] Dependency Updates'
+          body: |
+            ## Go Dependency Updates
+
+            This PR updates Go dependencies to their latest versions.
+
+            ### Security Fixes
+            - Security vulnerabilities fixed: ${{ steps.updates.outputs.security-count }}
+
+            ### Testing
+            - [ ] All tests pass
+            - [ ] Security scans clean
+            - [ ] Manual verification complete
+
+            ---
+            *Automated by dependency-updates workflow*
+          labels: |
+            dependencies
+            go
+            automated
+          assignees: ${{ github.repository_owner }}
+
+  test-updates:
+    name: Test Updated Dependencies
+    needs: [update-python, update-typescript, update-rust, update-go]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get all dependency PRs
+        id: get-prs
+        run: |
+          # Get all open dependency PRs
+          PRS=$(gh pr list --label "dependencies,automated" --json number,headRefName --jq '.[] | .number')
+          echo "prs=$PRS" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run tests on PRs
+        run: |
+          for PR in ${{ steps.get-prs.outputs.prs }}; do
+            echo "Testing PR #$PR"
+            gh pr checks $PR --watch
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-merge-patch:
+    name: Auto-merge Patch Updates
+    needs: [test-updates]
+    if: inputs.auto-merge-patch == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Auto-merge patch updates
+        run: |
+          # Get all dependency PRs with patch label
+          PRS=$(gh pr list --label "dependencies,automated,patch" --json number)
+
+          for PR in $(echo "$PRS" | jq -r '.[].number'); do
+            # Check if all tests passed
+            CHECKS_PASSED=$(gh pr checks $PR --json state --jq 'all(.[] ; .state == "SUCCESS")')
+
+            if [ "$CHECKS_PASSED" = "true" ]; then
+              echo "Auto-merging PR #$PR"
+              gh pr merge $PR --auto --squash
+            else
+              echo "PR #$PR has failing checks, skipping auto-merge"
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  summary:
+    name: Generate Summary
+    needs: [update-python, update-typescript, update-rust, update-go]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Dependency Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Update Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Python: ${{ needs.update-python.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- TypeScript: ${{ needs.update-typescript.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rust: ${{ needs.update-rust.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Go: ${{ needs.update-go.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the Pull Requests tab for created dependency update PRs." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,76 @@
+# Prometheus configuration for LLM Cost Ops - Development
+# Version: 1.0.0
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'llm-cost-ops-dev'
+    environment: 'development'
+
+# Alertmanager configuration (optional for development)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "/etc/prometheus/alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # LLM Cost Ops Application
+  - job_name: 'llm-cost-ops-app'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['app:9090']
+        labels:
+          service: 'llm-cost-ops'
+          instance: 'app-1'
+
+  # PostgreSQL Exporter (optional)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+
+  # Redis Exporter (optional)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+  # NATS Monitoring
+  - job_name: 'nats'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['nats:8222']
+        labels:
+          service: 'nats'
+
+  # Node Exporter (optional)
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+
+  # Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+
+  # Jaeger
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+        labels:
+          service: 'jaeger'

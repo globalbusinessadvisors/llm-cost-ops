@@ -1,0 +1,162 @@
+# Development environment values
+# This file overrides values.yaml for development deployments
+
+# Single replica for development
+replicaCount: 1
+
+# Development image settings
+image:
+  pullPolicy: Always
+  tag: "dev"
+
+# Pod annotations for development
+podAnnotations:
+  environment: "development"
+
+# Reduced resources for development
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Disable autoscaling in development
+autoscaling:
+  enabled: false
+
+# Development ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+  hosts:
+    - host: llm-cost-ops-dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: llm-cost-ops-dev-tls
+      hosts:
+        - llm-cost-ops-dev.local
+
+# Application configuration for development
+config:
+  # API configuration
+  api:
+    enableCors: true
+    enableLogging: true
+    requestTimeoutSecs: 60
+
+  # Database configuration - use SQLite for simplicity in dev
+  database:
+    type: "sqlite"
+    sqlitePath: "/data/cost-ops-dev.db"
+    poolSize: 5
+
+  # Logging configuration - verbose for development
+  logging:
+    level: "debug"
+    format: "text"
+    color: true
+
+  # Metrics configuration
+  metrics:
+    enabled: true
+    port: 9090
+
+  # Tracing configuration - enabled for development
+  tracing:
+    enabled: true
+    backend: "jaeger"
+    jaeger:
+      endpoint: "http://jaeger-collector:14268/api/traces"
+    samplingRate: 1.0  # Sample all traces in dev
+
+  # Authentication - relaxed for development
+  auth:
+    enabled: false  # Disable auth in dev for easier testing
+    jwt:
+      secret: "dev-jwt-secret-not-for-production"
+      expirationSecs: 86400
+
+  # Rate limiting - relaxed for development
+  rateLimit:
+    enabled: false
+
+  # Streaming - disabled by default in dev
+  streaming:
+    enabled: false
+
+  # DLQ configuration
+  dlq:
+    enabled: true
+    storage: "file"
+    filePath: "/data/dlq"
+
+  # Export configuration
+  export:
+    enabled: true
+    directory: "/data/exports"
+    scheduling:
+      enabled: false
+
+  # Forecasting configuration
+  forecasting:
+    enabled: true
+    windowDays: 7  # Shorter window for dev
+
+# Environment variables for development
+env:
+  - name: ENVIRONMENT
+    value: "development"
+  - name: RUST_LOG
+    value: "debug,sqlx=info"
+  - name: RUST_BACKTRACE
+    value: "1"
+
+# Persistence - disabled in development (use emptyDir)
+persistence:
+  enabled: false
+
+# PostgreSQL - disabled in development (using SQLite)
+postgresql:
+  enabled: false
+
+# Redis - disabled in development
+redis:
+  enabled: false
+
+# NATS - disabled in development
+nats:
+  enabled: false
+
+# ServiceMonitor - enabled for development monitoring
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  labels:
+    environment: development
+
+# Network Policy - disabled in development
+networkPolicy:
+  enabled: false
+
+# Liveness probe - more lenient for development
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  failureThreshold: 5
+
+# Readiness probe - more lenient for development
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 5
+
+# Startup probe - more lenient for development
+startupProbe:
+  failureThreshold: 60
+  periodSeconds: 5

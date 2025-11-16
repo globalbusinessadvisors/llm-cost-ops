@@ -1,0 +1,456 @@
+name: Python SDK - Documentation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'python-sdk/**'
+      - '.github/workflows/sdk-python-docs.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'python-sdk/**'
+  workflow_dispatch:
+
+env:
+  WORKING_DIR: python-sdk
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # Build API documentation
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: ${{ env.WORKING_DIR }}/pyproject.toml
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install \
+            sphinx \
+            sphinx-rtd-theme \
+            sphinx-autodoc-typehints \
+            sphinxcontrib-napoleon \
+            myst-parser \
+            sphinx-copybutton
+
+      - name: Check if docs directory exists
+        id: check-docs
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          if [ -d "docs" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            mkdir -p docs
+          fi
+
+      - name: Generate Sphinx configuration
+        if: steps.check-docs.outputs.exists == 'false'
+        working-directory: ${{ env.WORKING_DIR }}/docs
+        run: |
+          cat > conf.py << 'EOF'
+          # Configuration file for the Sphinx documentation builder.
+          import os
+          import sys
+          sys.path.insert(0, os.path.abspath('..'))
+
+          project = 'LLM-CostOps Python SDK'
+          copyright = '2025, LLM-CostOps Team'
+          author = 'LLM-CostOps Team'
+
+          extensions = [
+              'sphinx.ext.autodoc',
+              'sphinx.ext.napoleon',
+              'sphinx.ext.viewcode',
+              'sphinx.ext.intersphinx',
+              'sphinx_autodoc_typehints',
+              'myst_parser',
+              'sphinx_copybutton',
+          ]
+
+          templates_path = ['_templates']
+          exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+
+          html_theme = 'sphinx_rtd_theme'
+          html_static_path = ['_static']
+
+          # Napoleon settings
+          napoleon_google_docstring = True
+          napoleon_numpy_docstring = True
+          napoleon_include_init_with_doc = True
+
+          # Autodoc settings
+          autodoc_member_order = 'bysource'
+          autodoc_typehints = 'description'
+
+          # Intersphinx mapping
+          intersphinx_mapping = {
+              'python': ('https://docs.python.org/3', None),
+              'httpx': ('https://www.python-httpx.org/', None),
+              'pydantic': ('https://docs.pydantic.dev/latest/', None),
+          }
+          EOF
+
+          cat > index.rst << 'EOF'
+          LLM-CostOps Python SDK Documentation
+          =====================================
+
+          Welcome to the LLM-CostOps Python SDK documentation.
+
+          .. toctree::
+             :maxdepth: 2
+             :caption: Contents:
+
+             installation
+             quickstart
+             api
+             examples
+
+          Indices and tables
+          ==================
+
+          * :ref:`genindex`
+          * :ref:`modindex`
+          * :ref:`search`
+          EOF
+
+          cat > installation.rst << 'EOF'
+          Installation
+          ============
+
+          Basic Installation
+          ------------------
+
+          .. code-block:: bash
+
+             pip install llm-cost-ops
+
+          Development Installation
+          ------------------------
+
+          .. code-block:: bash
+
+             pip install llm-cost-ops[dev]
+
+          All Features
+          ------------
+
+          .. code-block:: bash
+
+             pip install llm-cost-ops[all]
+          EOF
+
+          cat > quickstart.rst << 'EOF'
+          Quick Start
+          ===========
+
+          Synchronous Usage
+          -----------------
+
+          .. code-block:: python
+
+             from llm_cost_ops import CostOpsClient
+
+             client = CostOpsClient(api_key="your-api-key")
+             usage = client.usage.submit(
+                 organization_id="org-123",
+                 provider="openai",
+                 model_id="gpt-4",
+                 input_tokens=1000,
+                 output_tokens=500
+             )
+
+          Asynchronous Usage
+          ------------------
+
+          .. code-block:: python
+
+             from llm_cost_ops import AsyncCostOpsClient
+
+             async with AsyncCostOpsClient(api_key="your-api-key") as client:
+                 usage = await client.usage.submit(
+                     organization_id="org-123",
+                     provider="openai",
+                     model_id="gpt-4",
+                     input_tokens=1000,
+                     output_tokens=500
+                 )
+          EOF
+
+          cat > api.rst << 'EOF'
+          API Reference
+          =============
+
+          Client
+          ------
+
+          .. automodule:: llm_cost_ops.client
+             :members:
+             :undoc-members:
+             :show-inheritance:
+
+          Configuration
+          -------------
+
+          .. automodule:: llm_cost_ops.config
+             :members:
+             :undoc-members:
+             :show-inheritance:
+
+          Resources
+          ---------
+
+          .. automodule:: llm_cost_ops.resources
+             :members:
+             :undoc-members:
+             :show-inheritance:
+
+          Types
+          -----
+
+          .. automodule:: llm_cost_ops.types
+             :members:
+             :undoc-members:
+             :show-inheritance:
+
+          Exceptions
+          ----------
+
+          .. automodule:: llm_cost_ops.exceptions
+             :members:
+             :undoc-members:
+             :show-inheritance:
+          EOF
+
+          cat > examples.rst << 'EOF'
+          Examples
+          ========
+
+          See the examples directory for more detailed examples.
+          EOF
+
+          mkdir -p _static _templates
+
+      - name: Build documentation
+        working-directory: ${{ env.WORKING_DIR }}/docs
+        run: |
+          echo "::group::Building Sphinx Documentation"
+          sphinx-build -W -b html . _build/html
+          echo "::endgroup::"
+
+      - name: Generate API documentation with pdoc
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::Generating pdoc API Documentation"
+          pip install pdoc3
+          pdoc --html --output-dir docs/_build/pdoc --force llm_cost_ops
+          echo "::endgroup::"
+
+      - name: Check documentation links
+        working-directory: ${{ env.WORKING_DIR }}/docs
+        continue-on-error: true
+        run: |
+          echo "::group::Checking Documentation Links"
+          sphinx-build -b linkcheck . _build/linkcheck
+          echo "::endgroup::"
+
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sdk-documentation
+          path: |
+            ${{ env.WORKING_DIR }}/docs/_build/html
+            ${{ env.WORKING_DIR }}/docs/_build/pdoc
+          retention-days: 30
+
+      - name: Generate documentation stats
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::Documentation Statistics"
+          echo "Files generated:"
+          find docs/_build/html -type f | wc -l
+          echo ""
+          echo "HTML files:"
+          find docs/_build/html -name "*.html" | wc -l
+          echo ""
+          echo "Total size:"
+          du -sh docs/_build/html
+          echo "::endgroup::"
+
+  # Deploy documentation to GitHub Pages
+  deploy-docs:
+    name: Deploy to GitHub Pages
+    needs: build-docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - name: Download documentation artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-sdk-documentation
+          path: docs/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/html
+          destination_dir: sdk/python
+          cname: docs.llm-cost-ops.dev
+          commit_message: 'docs: Update Python SDK documentation'
+
+  # Generate README documentation
+  readme-check:
+    name: README Documentation Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README completeness
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::README Check"
+
+          REQUIRED_SECTIONS=(
+            "Installation"
+            "Quick Start"
+            "Features"
+            "Documentation"
+            "Examples"
+            "Contributing"
+            "License"
+          )
+
+          MISSING=()
+          for section in "${REQUIRED_SECTIONS[@]}"; do
+            if ! grep -qi "## $section" README.md; then
+              MISSING+=("$section")
+            fi
+          done
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::warning::Missing README sections: ${MISSING[*]}"
+          else
+            echo "::notice::All required README sections present"
+          fi
+
+          echo "::endgroup::"
+
+      - name: Check code examples in README
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::Code Example Check"
+
+          # Extract Python code blocks from README
+          awk '/```python/,/```/' README.md | grep -v '```' > /tmp/readme_examples.py || true
+
+          if [ -s /tmp/readme_examples.py ]; then
+            echo "Found Python code examples, checking syntax..."
+            python -m py_compile /tmp/readme_examples.py || echo "::warning::README contains invalid Python syntax"
+          else
+            echo "::warning::No Python code examples found in README"
+          fi
+
+          echo "::endgroup::"
+
+  # Generate changelog
+  changelog-generation:
+    name: Generate Changelog
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        run: |
+          echo "::group::Generating Changelog"
+
+          cat > CHANGELOG.md << 'EOF'
+          # Changelog
+
+          All notable changes to the Python SDK will be documented in this file.
+
+          The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+          and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+          EOF
+
+          # Get all tags
+          TAGS=$(git tag -l "v*-python" --sort=-version:refname)
+
+          PREV_TAG=""
+          for TAG in $TAGS; do
+            VERSION=${TAG#v}
+            VERSION=${VERSION%-python}
+
+            echo "## [$VERSION] - $(git log -1 --format=%ai $TAG | cut -d' ' -f1)" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+
+            if [ -n "$PREV_TAG" ]; then
+              git log $PREV_TAG..$TAG --pretty=format:"- %s (%h)" --no-merges -- python-sdk/ >> CHANGELOG.md
+            else
+              git log $TAG --pretty=format:"- %s (%h)" --no-merges -- python-sdk/ | head -20 >> CHANGELOG.md
+            fi
+
+            echo "" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+
+            PREV_TAG=$TAG
+          done
+
+          cat CHANGELOG.md
+          echo "::endgroup::"
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG.md
+          retention-days: 30
+
+  # Generate summary
+  summary:
+    name: Documentation Summary
+    needs: [build-docs, deploy-docs, readme-check, changelog-generation]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create summary
+        run: |
+          echo "# Python SDK Documentation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Docs**: ${{ needs.build-docs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy Docs**: ${{ needs.deploy-docs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **README Check**: ${{ needs.readme-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Changelog**: ${{ needs.changelog-generation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "## Documentation Links" >> $GITHUB_STEP_SUMMARY
+            echo "- [Python SDK Documentation](https://docs.llm-cost-ops.dev/sdk/python/)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Documentation artifacts are available for download in the workflow run." >> $GITHUB_STEP_SUMMARY

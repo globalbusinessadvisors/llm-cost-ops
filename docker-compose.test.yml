@@ -1,0 +1,642 @@
+# Docker Compose for LLM Cost Ops - Testing Environment
+# Version: 1.0.0
+# Description: Testing stack with test database, mock services, and test dependencies
+
+version: '3.8'
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  test-network:
+    driver: bridge
+    labels:
+      com.llm-cost-ops.description: "Test network"
+      com.llm-cost-ops.environment: "test"
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  test-postgres-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Test PostgreSQL data (ephemeral)"
+      com.llm-cost-ops.environment: "test"
+
+  test-reports:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Test reports and coverage"
+      com.llm-cost-ops.environment: "test"
+
+# ============================================================================
+# SERVICES
+# ============================================================================
+services:
+  # ==========================================================================
+  # TEST APPLICATION
+  # ==========================================================================
+  test-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        - RUST_VERSION=1.75
+    container_name: llm-cost-ops-test-app
+    hostname: test-app
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./migrations:/app/migrations:ro
+      - ./migrations_postgres:/app/migrations_postgres:ro
+      - ./Cargo.toml:/app/Cargo.toml:ro
+      - ./Cargo.lock:/app/Cargo.lock:ro
+      - test-reports:/app/target/test-reports
+
+    environment:
+      # Test Configuration
+      RUST_LOG: ${RUST_LOG:-debug}
+      RUST_BACKTRACE: ${RUST_BACKTRACE:-full}
+      RUST_TEST_THREADS: ${RUST_TEST_THREADS:-4}
+      CARGO_INCREMENTAL: ${CARGO_INCREMENTAL:-0}
+
+      # Test Database
+      DATABASE_URL: postgres://test:test@test-postgres:5432/llm_cost_ops_test
+      TEST_DATABASE_URL: postgres://test:test@test-postgres:5432/llm_cost_ops_test
+
+      # Test Redis
+      REDIS_URL: redis://test-redis:6379/0
+
+      # Test NATS
+      NATS_URL: nats://test-nats:4222
+
+      # Mock Services
+      MOCK_SERVER_URL: http://mock-server:8080
+
+      # Test Configurations
+      JWT_SECRET: test-secret-key
+      API_KEY_HEADER: X-API-Key
+      ENABLE_COMPRESSION: true
+      ENABLE_RATE_LIMITING: false
+      ENABLE_METRICS: false
+      ENABLE_TRACING: false
+
+    command: cargo test --all-features -- --nocapture
+
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+      test-nats:
+        condition: service_started
+      mock-server:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+    labels:
+      com.llm-cost-ops.service: "test-application"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # TEST INTEGRATION APP (for integration tests)
+  # ==========================================================================
+  test-integration:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-test-integration
+    hostname: test-integration
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./migrations:/app/migrations:ro
+      - ./migrations_postgres:/app/migrations_postgres:ro
+      - ./Cargo.toml:/app/Cargo.toml:ro
+      - ./Cargo.lock:/app/Cargo.lock:ro
+      - test-reports:/app/target/test-reports
+
+    environment:
+      RUST_LOG: debug
+      RUST_BACKTRACE: full
+      DATABASE_URL: postgres://test:test@test-postgres:5432/llm_cost_ops_test
+      REDIS_URL: redis://test-redis:6379/0
+      NATS_URL: nats://test-nats:4222
+      MOCK_SERVER_URL: http://mock-server:8080
+      JWT_SECRET: test-secret-key
+
+    command: cargo test --test '*_tests' -- --nocapture
+
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+      test-nats:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    labels:
+      com.llm-cost-ops.service: "test-integration"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # TEST POSTGRESQL DATABASE
+  # ==========================================================================
+  test-postgres:
+    image: postgres:16-alpine
+    container_name: llm-cost-ops-test-postgres
+    hostname: test-postgres
+    restart: "no"
+
+    networks:
+      - test-network
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - test-postgres-data:/var/lib/postgresql/data
+
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: llm_cost_ops_test
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+      PGDATA: /var/lib/postgresql/data/pgdata
+
+      # Test database doesn't need production tuning
+      POSTGRES_SHARED_BUFFERS: 128MB
+      POSTGRES_MAX_CONNECTIONS: 50
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d llm_cost_ops_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    labels:
+      com.llm-cost-ops.service: "test-database"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # TEST REDIS CACHE
+  # ==========================================================================
+  test-redis:
+    image: redis:7-alpine
+    container_name: llm-cost-ops-test-redis
+    hostname: test-redis
+    restart: "no"
+
+    networks:
+      - test-network
+
+    ports:
+      - "6380:6379"
+
+    command: redis-server --save "" --appendonly no
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+    labels:
+      com.llm-cost-ops.service: "test-cache"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # TEST NATS MESSAGE BROKER
+  # ==========================================================================
+  test-nats:
+    image: nats:2.10-alpine
+    container_name: llm-cost-ops-test-nats
+    hostname: test-nats
+    restart: "no"
+
+    networks:
+      - test-network
+
+    ports:
+      - "4223:4222"
+
+    command: ["-DV"]
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+    labels:
+      com.llm-cost-ops.service: "test-message-broker"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # MOCK SERVER (WireMock)
+  # ==========================================================================
+  mock-server:
+    image: wiremock/wiremock:3.3.1
+    container_name: llm-cost-ops-mock-server
+    hostname: mock-server
+    restart: "no"
+
+    networks:
+      - test-network
+
+    ports:
+      - "8888:8080"
+
+    volumes:
+      - ./tests/mocks/mappings:/home/wiremock/mappings:ro
+      - ./tests/mocks/__files:/home/wiremock/__files:ro
+
+    command:
+      - --global-response-templating
+      - --verbose
+      - --max-request-journal=1000
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/__admin/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    labels:
+      com.llm-cost-ops.service: "mock-server"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # TEST RUNNER (for CI/CD)
+  # ==========================================================================
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-test-runner
+    hostname: test-runner
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./:/app
+      - test-reports:/app/target/test-reports
+
+    environment:
+      RUST_LOG: info
+      RUST_BACKTRACE: 1
+      DATABASE_URL: postgres://test:test@test-postgres:5432/llm_cost_ops_test
+      REDIS_URL: redis://test-redis:6379/0
+      NATS_URL: nats://test-nats:4222
+      MOCK_SERVER_URL: http://mock-server:8080
+
+      # Coverage Configuration
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-C instrument-coverage"
+      LLVM_PROFILE_FILE: "coverage-%p-%m.profraw"
+
+    command: >
+      sh -c "
+        echo 'Running migrations...' &&
+        cargo install sqlx-cli --no-default-features --features postgres &&
+        sqlx migrate run &&
+        echo 'Running unit tests...' &&
+        cargo test --lib --all-features -- --nocapture &&
+        echo 'Running integration tests...' &&
+        cargo test --test '*' --all-features -- --nocapture &&
+        echo 'Running property tests...' &&
+        cargo test --test property_tests -- --nocapture &&
+        echo 'Generating coverage report...' &&
+        cargo install grcov &&
+        grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing -o ./target/test-reports/coverage &&
+        echo 'All tests completed successfully!'
+      "
+
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+      test-nats:
+        condition: service_started
+      mock-server:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '2.0'
+          memory: 2G
+
+    labels:
+      com.llm-cost-ops.service: "test-runner"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # BENCHMARK RUNNER
+  # ==========================================================================
+  benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-benchmark
+    hostname: benchmark
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./:/app
+      - test-reports:/app/target/criterion
+
+    environment:
+      RUST_LOG: warn
+      DATABASE_URL: postgres://test:test@test-postgres:5432/llm_cost_ops_test
+
+    command: cargo bench --bench cost_calculation
+
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 2G
+        reservations:
+          cpus: '2.0'
+          memory: 1G
+
+    labels:
+      com.llm-cost-ops.service: "benchmark"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # SECURITY SCANNER (cargo-audit)
+  # ==========================================================================
+  security-scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-security-scanner
+    hostname: security-scanner
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./:/app
+      - test-reports:/app/target/security
+
+    command: >
+      sh -c "
+        cargo install cargo-audit &&
+        cargo audit --json > /app/target/security/audit-report.json &&
+        cargo audit
+      "
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    labels:
+      com.llm-cost-ops.service: "security-scanner"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # LINT CHECKER (clippy)
+  # ==========================================================================
+  lint-checker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-lint-checker
+    hostname: lint-checker
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./:/app
+      - test-reports:/app/target/clippy
+
+    command: >
+      sh -c "
+        rustup component add clippy &&
+        cargo clippy --all-features --all-targets -- -D warnings
+      "
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    labels:
+      com.llm-cost-ops.service: "lint-checker"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # FORMAT CHECKER (rustfmt)
+  # ==========================================================================
+  format-checker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-format-checker
+    hostname: format-checker
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./:/app
+
+    command: >
+      sh -c "
+        rustup component add rustfmt &&
+        cargo fmt -- --check
+      "
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+    labels:
+      com.llm-cost-ops.service: "format-checker"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # LOAD TEST RUNNER (optional)
+  # ==========================================================================
+  load-test:
+    image: grafana/k6:latest
+    container_name: llm-cost-ops-load-test
+    hostname: load-test
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./tests/load:/scripts:ro
+      - test-reports:/reports
+
+    environment:
+      K6_OUT: json=/reports/load-test-results.json
+      TARGET_URL: http://test-app:8080
+
+    command: run --vus 10 --duration 30s /scripts/load-test.js
+
+    depends_on:
+      test-app:
+        condition: service_started
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    labels:
+      com.llm-cost-ops.service: "load-test"
+      com.llm-cost-ops.environment: "test"
+
+  # ==========================================================================
+  # TEST DATABASE SEEDER
+  # ==========================================================================
+  test-seeder:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-test-seeder
+    hostname: test-seeder
+    restart: "no"
+
+    networks:
+      - test-network
+
+    volumes:
+      - ./tests/fixtures:/fixtures:ro
+      - ./migrations:/app/migrations:ro
+
+    environment:
+      DATABASE_URL: postgres://test:test@test-postgres:5432/llm_cost_ops_test
+
+    command: >
+      sh -c "
+        cargo install sqlx-cli --no-default-features --features postgres &&
+        sqlx migrate run &&
+        echo 'Database seeded successfully!'
+      "
+
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    labels:
+      com.llm-cost-ops.service: "test-seeder"
+      com.llm-cost-ops.environment: "test"

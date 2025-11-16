@@ -1,0 +1,9 @@
+llm-devops-team:
+  name: LLM DevOps Team
+  title: Core maintainers of LLM Cost Ops
+  url: https://github.com/llm-devops
+  image_url: https://github.com/llm-devops.png
+  page: true
+  socials:
+    github: llm-devops
+    x: llmcostops

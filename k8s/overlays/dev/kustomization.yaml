@@ -11,6 +11,13 @@ commonLabels:
 bases:
 - ../../base
 
+resources:
+# Include database components for dev
+- ../../database
+
+# Optional: Include monitoring for dev (can be commented out to save resources)
+# - ../../monitoring
+
 replicas:
 - name: llm-cost-ops
   count: 1
@@ -19,8 +26,12 @@ images:
 - name: llm-cost-ops
   newName: ghcr.io/your-org/llm-cost-ops
   newTag: dev-latest
+- name: postgres
+  newName: postgres
+  newTag: 16-alpine
 
 patches:
+# Application resource limits (reduced for dev)
 - patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/resources/limits/memory
@@ -38,6 +49,7 @@ patches:
     kind: Deployment
     name: llm-cost-ops
 
+# HPA settings for dev
 - patch: |-
     - op: replace
       path: /spec/minReplicas
@@ -49,16 +61,48 @@ patches:
     kind: HorizontalPodAutoscaler
     name: llm-cost-ops
 
+# Database resource limits (reduced for dev)
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: "512Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/cpu
+      value: "500m"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: "256Mi"
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: "250m"
+  target:
+    kind: StatefulSet
+    name: postgres
+
+# Database storage (reduced for dev)
+- patch: |-
+    - op: replace
+      path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+      value: "10Gi"
+  target:
+    kind: StatefulSet
+    name: postgres
+
 configMapGenerator:
 - name: llm-cost-ops-config
   behavior: merge
   literals:
   - ENVIRONMENT=development
   - LOG_LEVEL=debug
+  - RUST_LOG=debug,llm_cost_ops=trace
   - TRACING_LEVEL=debug
+  - DATABASE_POOL_SIZE=5
 
 secretGenerator:
 - name: llm-cost-ops-secrets
   behavior: merge
   literals:
-  - DATABASE_URL=postgresql://dev_user:dev_pass@postgres-dev:5432/llm_cost_ops_dev
+  - DATABASE_URL=postgresql://postgres:dev_password@postgres:5432/llm_cost_ops
+  - database-password=dev_password
+  - grafana-admin-user=admin
+  - grafana-admin-password=dev_admin_pass

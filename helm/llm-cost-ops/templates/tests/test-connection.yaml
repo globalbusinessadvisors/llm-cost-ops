@@ -1,0 +1,32 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "llm-cost-ops.fullname" . }}-test-connection"
+  labels:
+    {{- include "llm-cost-ops.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  containers:
+    - name: curl
+      image: {{ .Values.tests.image.registry }}/{{ .Values.tests.image.repository }}:{{ .Values.tests.image.tag }}
+      imagePullPolicy: {{ .Values.tests.image.pullPolicy }}
+      command: ['sh', '-c']
+      args:
+        - |
+          set -e
+          echo "Testing API endpoint..."
+          curl -f http://{{ include "llm-cost-ops.fullname" . }}:{{ .Values.service.port }}/health || exit 1
+          echo "API health check passed!"
+
+          {{- if .Values.config.metrics.enabled }}
+          echo "Testing metrics endpoint..."
+          curl -f http://{{ include "llm-cost-ops.fullname" . }}:{{ .Values.config.metrics.port }}{{ .Values.config.metrics.path }} || exit 1
+          echo "Metrics endpoint passed!"
+          {{- end }}
+
+          echo "All tests passed!"
+  restartPolicy: Never
+{{- end }}

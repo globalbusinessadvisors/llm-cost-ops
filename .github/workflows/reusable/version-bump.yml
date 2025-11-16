@@ -1,0 +1,318 @@
+name: Reusable Version Bump
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      bump-type:
+        required: false
+        type: string
+        default: 'auto'
+        description: 'Version bump type: major, minor, patch, auto (from commits)'
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+        description: 'Perform a dry run without committing'
+    outputs:
+      new-version:
+        description: 'The new version number'
+        value: ${{ jobs.version-bump.outputs.new-version }}
+      old-version:
+        description: 'The previous version number'
+        value: ${{ jobs.version-bump.outputs.old-version }}
+      version-changed:
+        description: 'Whether the version changed'
+        value: ${{ jobs.version-bump.outputs.version-changed }}
+
+jobs:
+  version-bump:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    outputs:
+      new-version: ${{ steps.bump.outputs.new-version }}
+      old-version: ${{ steps.bump.outputs.old-version }}
+      version-changed: ${{ steps.bump.outputs.version-changed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Determine version bump type from commits
+      - name: Analyze commits for version bump
+        if: inputs.bump-type == 'auto'
+        id: analyze-commits
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s")
+          else
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s")
+          fi
+
+          # Determine bump type based on conventional commits
+          BUMP_TYPE="patch"
+
+          if echo "$COMMITS" | grep -qiE "^(BREAKING CHANGE|feat!|fix!)"; then
+            BUMP_TYPE="major"
+          elif echo "$COMMITS" | grep -qiE "^feat(\(.*\))?:"; then
+            BUMP_TYPE="minor"
+          fi
+
+          echo "bump-type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "Detected bump type: $BUMP_TYPE"
+
+      # Python version bump
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python tools
+        if: inputs.language == 'python'
+        run: pip install bump2version toml
+
+      - name: Bump Python version
+        if: inputs.language == 'python'
+        id: bump-python
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Read current version from setup.py or pyproject.toml
+          if [ -f "pyproject.toml" ]; then
+            OLD_VERSION=$(python -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
+          elif [ -f "setup.py" ]; then
+            OLD_VERSION=$(python setup.py --version)
+          else
+            echo "No version file found"
+            exit 1
+          fi
+
+          BUMP_TYPE="${{ inputs.bump-type == 'auto' && steps.analyze-commits.outputs.bump-type || inputs.bump-type }}"
+
+          # Bump version
+          if [ "${{ inputs.dry-run }}" = "true" ]; then
+            bump2version --dry-run --verbose $BUMP_TYPE
+          else
+            bump2version --verbose $BUMP_TYPE
+          fi
+
+          # Read new version
+          if [ -f "pyproject.toml" ]; then
+            NEW_VERSION=$(python -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
+          else
+            NEW_VERSION=$(python setup.py --version)
+          fi
+
+          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version-changed=$([[ $OLD_VERSION != $NEW_VERSION ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      # TypeScript version bump
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bump TypeScript version
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        id: bump-typescript
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          BUMP_TYPE="${{ inputs.bump-type == 'auto' && steps.analyze-commits.outputs.bump-type || inputs.bump-type }}"
+
+          if [ "${{ inputs.dry-run }}" = "false" ]; then
+            npm version $BUMP_TYPE --no-git-tag-version
+          fi
+
+          NEW_VERSION=$(node -p "require('./package.json').version")
+
+          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version-changed=$([[ $OLD_VERSION != $NEW_VERSION ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      # Go version bump
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Bump Go version
+        if: inputs.language == 'go'
+        id: bump-go
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Go uses git tags for versioning
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          OLD_VERSION=${LAST_TAG#v}
+
+          BUMP_TYPE="${{ inputs.bump-type == 'auto' && steps.analyze-commits.outputs.bump-type || inputs.bump-type }}"
+
+          # Parse version
+          IFS='.' read -ra VERSION_PARTS <<< "$OLD_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+
+          # Bump version
+          case $BUMP_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version-changed=true" >> $GITHUB_OUTPUT
+
+      # Rust version bump
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install cargo-edit
+        if: inputs.language == 'rust'
+        run: cargo install cargo-edit
+
+      - name: Bump Rust version
+        if: inputs.language == 'rust'
+        id: bump-rust
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          OLD_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')
+          BUMP_TYPE="${{ inputs.bump-type == 'auto' && steps.analyze-commits.outputs.bump-type || inputs.bump-type }}"
+
+          if [ "${{ inputs.dry-run }}" = "false" ]; then
+            cargo set-version --bump $BUMP_TYPE
+          fi
+
+          NEW_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')
+
+          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version-changed=$([[ $OLD_VERSION != $NEW_VERSION ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      # Java version bump
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Bump Java version
+        if: inputs.language == 'java'
+        id: bump-java
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # For Gradle
+          if [ -f "gradle.properties" ]; then
+            OLD_VERSION=$(grep "version=" gradle.properties | cut -d'=' -f2)
+            BUMP_TYPE="${{ inputs.bump-type == 'auto' && steps.analyze-commits.outputs.bump-type || inputs.bump-type }}"
+
+            IFS='.' read -ra VERSION_PARTS <<< "$OLD_VERSION"
+            MAJOR=${VERSION_PARTS[0]}
+            MINOR=${VERSION_PARTS[1]}
+            PATCH=${VERSION_PARTS[2]}
+
+            case $BUMP_TYPE in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+            if [ "${{ inputs.dry-run }}" = "false" ]; then
+              sed -i "s/version=.*/version=$NEW_VERSION/" gradle.properties
+            fi
+          elif [ -f "pom.xml" ]; then
+            # For Maven
+            OLD_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+            ./mvnw versions:set -DnewVersion=$NEW_VERSION -DgenerateBackupPoms=false
+          fi
+
+          echo "old-version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version-changed=$([[ $OLD_VERSION != $NEW_VERSION ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      # Consolidate outputs
+      - name: Set outputs
+        id: bump
+        run: |
+          case "${{ inputs.language }}" in
+            python)
+              echo "old-version=${{ steps.bump-python.outputs.old-version }}" >> $GITHUB_OUTPUT
+              echo "new-version=${{ steps.bump-python.outputs.new-version }}" >> $GITHUB_OUTPUT
+              echo "version-changed=${{ steps.bump-python.outputs.version-changed }}" >> $GITHUB_OUTPUT
+              ;;
+            typescript|javascript)
+              echo "old-version=${{ steps.bump-typescript.outputs.old-version }}" >> $GITHUB_OUTPUT
+              echo "new-version=${{ steps.bump-typescript.outputs.new-version }}" >> $GITHUB_OUTPUT
+              echo "version-changed=${{ steps.bump-typescript.outputs.version-changed }}" >> $GITHUB_OUTPUT
+              ;;
+            go)
+              echo "old-version=${{ steps.bump-go.outputs.old-version }}" >> $GITHUB_OUTPUT
+              echo "new-version=${{ steps.bump-go.outputs.new-version }}" >> $GITHUB_OUTPUT
+              echo "version-changed=${{ steps.bump-go.outputs.version-changed }}" >> $GITHUB_OUTPUT
+              ;;
+            rust)
+              echo "old-version=${{ steps.bump-rust.outputs.old-version }}" >> $GITHUB_OUTPUT
+              echo "new-version=${{ steps.bump-rust.outputs.new-version }}" >> $GITHUB_OUTPUT
+              echo "version-changed=${{ steps.bump-rust.outputs.version-changed }}" >> $GITHUB_OUTPUT
+              ;;
+            java)
+              echo "old-version=${{ steps.bump-java.outputs.old-version }}" >> $GITHUB_OUTPUT
+              echo "new-version=${{ steps.bump-java.outputs.new-version }}" >> $GITHUB_OUTPUT
+              echo "version-changed=${{ steps.bump-java.outputs.version-changed }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Commit version bump
+        if: inputs.dry-run == false && steps.bump.outputs.version-changed == 'true'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          git add .
+          git commit -m "chore: bump version from ${{ steps.bump.outputs.old-version }} to ${{ steps.bump.outputs.new-version }}"
+          git push
+
+      - name: Generate summary
+        run: |
+          echo "# Version Bump Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Language**: ${{ inputs.language }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Old Version**: ${{ steps.bump.outputs.old-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version**: ${{ steps.bump.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type**: ${{ inputs.bump-type == 'auto' && steps.analyze-commits.outputs.bump-type || inputs.bump-type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run**: ${{ inputs.dry-run }}" >> $GITHUB_STEP_SUMMARY

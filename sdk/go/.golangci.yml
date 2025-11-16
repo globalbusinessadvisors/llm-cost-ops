@@ -1,0 +1,287 @@
+# golangci-lint configuration for LLM Cost Ops Go SDK
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  # Timeout for analysis
+  timeout: 5m
+
+  # Include test files
+  tests: true
+
+  # Skip auto-generated files
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*\\.gen\\.go$"
+
+  # Which dirs to skip: issues from them won't be reported
+  skip-dirs:
+    - vendor
+    - third_party
+
+  # Enable all modules
+  modules-download-mode: readonly
+
+# Output configuration
+output:
+  # Colored output
+  format: colored-line-number
+
+  # Print lines of code with issue
+  print-issued-lines: true
+
+  # Print linter name in the end of issue text
+  print-linter-name: true
+
+  # Make issues output unique by line
+  uniq-by-line: true
+
+  # Sort results by: filepath, line and column
+  sort-results: true
+
+# Linters configuration
+linters:
+  # Disable all linters by default
+  disable-all: true
+
+  # Enable specific linters
+  enable:
+    # Enabled by default
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Reports suspicious constructs
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Static analysis
+    - typecheck     # Type checking
+    - unused        # Check for unused code
+
+    # Additional recommended linters
+    - bodyclose     # Check whether HTTP response body is closed
+    - dupl          # Code clone detection
+    - gochecknoinits # Check for init functions
+    - goconst       # Find repeated strings that could be constants
+    - gocritic      # Opinionated linter
+    - gocyclo       # Cyclomatic complexity
+    - gofmt         # Check whether code was gofmt-ed
+    - goimports     # Check import statements formatting
+    - goprintffuncname # Check printf-like function names
+    - gosec         # Security problems
+    - lll           # Report long lines
+    - misspell      # Spell checking
+    - nakedret      # Check naked returns in functions
+    - nolintlint    # Reports ill-formed or insufficient nolint directives
+    - rowserrcheck  # Check whether Err of rows is checked
+    - exportloopref # Check for pointers to enclosing loop variables
+    - unconvert     # Remove unnecessary type conversions
+    - unparam       # Report unused function parameters
+    - whitespace    # Tool for detection of leading and trailing whitespace
+
+    # Advanced linters
+    - cyclop        # Check function and package cyclomatic complexity
+    - errorlint     # Find code that will cause problems with Go 1.13+ error wrapping
+    - exhaustive    # Check exhaustiveness of enum switch statements
+    - funlen        # Tool for detection of long functions
+    - godot         # Check if comments end in a period
+    - godox         # Detect FIXME, TODO and other comment keywords
+    - nestif        # Report deeply nested if statements
+    - nilerr        # Find code that returns nil even if checks error
+    - nilnil        # Check that there is no simultaneous return of nil error and nil value
+    - prealloc      # Find slice declarations that could potentially be preallocated
+    - predeclared   # Find code that shadows one of Go's predeclared identifiers
+    - revive        # Fast, configurable, extensible, flexible linter
+    - stylecheck    # Stylecheck is a replacement for golint
+    - thelper       # Detect golang test helpers without t.Helper()
+    - tparallel     # Detect inappropriate usage of t.Parallel()
+    - wastedassign  # Find wasted assignment statements
+
+linters-settings:
+  # Settings for dupl
+  dupl:
+    threshold: 100
+
+  # Settings for errcheck
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  # Settings for goconst
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+    ignore-tests: true
+
+  # Settings for gocritic
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - whyNoLint
+      - dupImport
+
+  # Settings for gocyclo
+  gocyclo:
+    min-complexity: 15
+
+  # Settings for gofmt
+  gofmt:
+    simplify: true
+
+  # Settings for goimports
+  goimports:
+    local-prefixes: github.com/llm-devops/llm-cost-ops
+
+  # Settings for gosec
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104 # Audit errors not checked - covered by errcheck
+    config:
+      global:
+        nosec: false
+        show-ignored: true
+
+  # Settings for lll (line length)
+  lll:
+    line-length: 120
+    tab-width: 4
+
+  # Settings for misspell
+  misspell:
+    locale: US
+    ignore-words:
+      - llm
+      - devops
+      - costops
+
+  # Settings for nakedret
+  nakedret:
+    max-func-lines: 30
+
+  # Settings for revive
+  revive:
+    severity: warning
+    confidence: 0.8
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  # Settings for staticcheck
+  staticcheck:
+    checks:
+      - all
+      - "-SA1019" # Ignore deprecation warnings temporarily
+
+  # Settings for stylecheck
+  stylecheck:
+    checks:
+      - all
+      - "-ST1000" # Disable package comment requirement for now
+      - "-ST1003" # Allow underscores in names
+
+  # Settings for cyclop
+  cyclop:
+    max-complexity: 15
+    package-average: 10.0
+
+  # Settings for errorlint
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+
+  # Settings for funlen
+  funlen:
+    lines: 100
+    statements: 50
+
+  # Settings for nestif
+  nestif:
+    min-complexity: 5
+
+issues:
+  # Maximum issues count per one linter
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text
+  max-same-issues: 0
+
+  # Show only new issues
+  new: false
+
+  # Fix found issues (if possible)
+  fix: false
+
+  # Exclude specific rules
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - goconst
+
+    # Exclude known linters from partially hard-vendored code
+    - path: internal/third_party/
+      linters:
+        - gocritic
+        - staticcheck
+        - stylecheck
+
+    # Exclude shadow checking on err variables
+    - text: "shadow: declaration of \"err\""
+      linters:
+        - govet
+
+    # Exclude lll for long lines with go:generate
+    - source: "^//go:generate "
+      linters:
+        - lll
+
+    # Allow TODO comments in code
+    - text: "Comment should end in a period"
+      linters:
+        - godot
+
+  # Independently of option `exclude` we use default exclude patterns
+  exclude-use-default: false
+
+severity:
+  default-severity: warning
+
+  # Rules for severity
+  rules:
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - gosec
+      severity: error

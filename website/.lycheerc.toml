@@ -1,0 +1,67 @@
+# Lychee link checker configuration
+# https://lychee.cli.rs/#/usage/config
+
+# Maximum number of concurrent network requests
+max_concurrency = 10
+
+# Maximum number of allowed redirects
+max_redirects = 5
+
+# Timeout per request in seconds
+timeout = 20
+
+# When HTTPS is available, treat HTTP links as errors
+require_https = false
+
+# Check links inside `<code>` and `<pre>` blocks
+include_verbatim = false
+
+# Don't check these URLs
+exclude = [
+  # Localhost URLs
+  'http://localhost:*',
+  'http://127.0.0.1:*',
+
+  # Social media profiles (often rate-limited)
+  'https://twitter.com/*',
+  'https://x.com/*',
+  'https://discord.gg/*',
+  'https://www.linkedin.com/*',
+
+  # Example domains
+  '*.example.com',
+
+  # Authentication required
+  'https://stackoverflow.com/users/*',
+]
+
+# Exclude these file patterns
+exclude_path = [
+  './node_modules',
+  './build',
+  './.docusaurus',
+]
+
+# Accept these status codes
+accept = [
+  200,  # OK
+  204,  # No Content
+  206,  # Partial Content
+  301,  # Moved Permanently
+  302,  # Found
+  307,  # Temporary Redirect
+  308,  # Permanent Redirect
+  429,  # Too Many Requests (don't fail on rate limits)
+]
+
+# User agent
+user_agent = "Mozilla/5.0 (compatible; LLM-Cost-Ops-Docs-Checker/1.0)"
+
+# Output format
+format = "markdown"
+
+# Cache results
+cache = true
+
+# Maximum age of cached requests in seconds (1 day)
+max_cache_age = "1d"

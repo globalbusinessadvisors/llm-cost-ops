@@ -1,0 +1,406 @@
+name: Reusable Security Scanning
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      enable-codeql:
+        required: false
+        type: boolean
+        default: true
+        description: 'Enable CodeQL analysis'
+      enable-sast:
+        required: false
+        type: boolean
+        default: true
+        description: 'Enable SAST scanning with Semgrep'
+      enable-dependency-scan:
+        required: false
+        type: boolean
+        default: true
+        description: 'Enable dependency vulnerability scanning'
+      enable-secret-scan:
+        required: false
+        type: boolean
+        default: true
+        description: 'Enable secret scanning'
+    secrets:
+      SNYK_TOKEN:
+        required: false
+        description: 'Snyk API token'
+
+jobs:
+  codeql:
+    name: CodeQL Analysis
+    if: inputs.enable-codeql
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ inputs.language == 'typescript' && 'javascript' || inputs.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ inputs.language }}"
+
+  semgrep:
+    name: Semgrep SAST
+    if: inputs.enable-sast
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/owasp-top-ten
+            p/ci
+          generateSarif: true
+
+      - name: Upload Semgrep results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    if: inputs.enable-dependency-scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python dependency scanning
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]" || true
+
+      - name: Run pip-audit (Python)
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install pip-audit
+          pip-audit --format json --output pip-audit.json || true
+        continue-on-error: true
+
+      - name: Run Safety (Python)
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install safety
+          safety check --json --output safety.json || true
+        continue-on-error: true
+
+      # TypeScript dependency scanning
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run npm audit (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npm audit --json > npm-audit.json || true
+        continue-on-error: true
+
+      - name: Run audit-ci (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npx audit-ci --config audit-ci.json || true
+        continue-on-error: true
+
+      # Go dependency scanning
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Run govulncheck (Go)
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck -json ./... > govulncheck.json || true
+        continue-on-error: true
+
+      - name: Run Nancy (Go)
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          go list -json -deps ./... | docker run --rm -i sonatypecommunity/nancy:latest sleuth || true
+        continue-on-error: true
+
+      # Java dependency scanning
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Run OWASP Dependency Check (Java)
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          ./gradlew dependencyCheckAnalyze || true
+        continue-on-error: true
+
+      # Rust dependency scanning
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Run cargo audit (Rust)
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo install cargo-audit || true
+          cargo audit --json > cargo-audit.json || true
+        continue-on-error: true
+
+      - name: Run cargo deny (Rust)
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo install cargo-deny || true
+          cargo deny check --format json > cargo-deny.json || true
+        continue-on-error: true
+
+      # Snyk scanning (multi-language)
+      - name: Run Snyk
+        if: secrets.SNYK_TOKEN != ''
+        uses: snyk/actions/setup@master
+
+      - name: Snyk test (Python)
+        if: inputs.language == 'python' && secrets.SNYK_TOKEN != ''
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --file=requirements.txt --json > snyk.json || true
+        continue-on-error: true
+
+      - name: Snyk test (TypeScript)
+        if: (inputs.language == 'typescript' || inputs.language == 'javascript') && secrets.SNYK_TOKEN != ''
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --json > snyk.json || true
+        continue-on-error: true
+
+      # Upload scan results
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-scan-results-${{ inputs.language }}
+          path: |
+            ${{ inputs.working-directory }}/*audit*.json
+            ${{ inputs.working-directory }}/snyk.json
+            ${{ inputs.working-directory }}/safety.json
+          retention-days: 90
+
+  secret-scan:
+    name: Secret Scanning
+    if: inputs.enable-secret-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for secret scanning
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: Upload secret scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: secret-scan-results
+          path: |
+            gitleaks-report.json
+            trufflehog-results.json
+          retention-days: 90
+
+  container-scan:
+    name: Container Image Scan
+    if: inputs.language == 'rust' || inputs.language == 'go' || inputs.language == 'java'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        if: hashFiles(format('{0}/Dockerfile', inputs.working-directory)) != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: docker build -t test-image:latest .
+
+      - name: Run Trivy vulnerability scanner
+        if: hashFiles(format('{0}/Dockerfile', inputs.working-directory)) != ''
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'test-image:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy results to GitHub Security
+        if: hashFiles(format('{0}/Dockerfile', inputs.working-directory)) != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Grype scanner
+        if: hashFiles(format('{0}/Dockerfile', inputs.working-directory)) != ''
+        uses: anchore/scan-action@v3
+        with:
+          image: 'test-image:latest'
+          fail-build: false
+          severity-cutoff: high
+
+  sbom-generation:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          path: ${{ inputs.working-directory }}
+          format: spdx-json
+          artifact-name: sbom-${{ inputs.language }}.spdx.json
+          output-file: ${{ inputs.working-directory }}/sbom.spdx.json
+
+      - name: Generate SBOM with CycloneDX
+        uses: CycloneDX/gh-node-module-generatebom@master
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        with:
+          path: ${{ inputs.working-directory }}
+          output: ${{ inputs.working-directory }}/sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ inputs.language }}
+          path: |
+            ${{ inputs.working-directory }}/sbom.*.json
+          retention-days: 90
+
+      - name: Upload SBOM to Dependency Graph
+        uses: advanced-security/sbom-dependency-submission-action@v0.0.1
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        with:
+          sbom-file-path: ${{ inputs.working-directory }}/sbom.spdx.json
+
+  security-scorecard:
+    name: OSSF Scorecard
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run OSSF Scorecard
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+  security-summary:
+    name: Security Summary
+    needs: [codeql, semgrep, dependency-scan, secret-scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate security summary
+        run: |
+          echo "# Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "- CodeQL: ${{ needs.codeql.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Semgrep SAST: ${{ needs.semgrep.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency Scan: ${{ needs.dependency-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Secret Scan: ${{ needs.secret-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed results in the Security tab." >> $GITHUB_STEP_SUMMARY

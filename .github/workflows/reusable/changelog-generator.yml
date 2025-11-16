@@ -1,0 +1,264 @@
+name: Reusable Changelog Generator
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      version:
+        required: false
+        type: string
+        description: 'Version to generate changelog for (defaults to latest tag)'
+      output-file:
+        required: false
+        type: string
+        default: 'CHANGELOG.md'
+        description: 'Output file for changelog'
+      commit-changelog:
+        required: false
+        type: boolean
+        default: true
+        description: 'Commit the generated changelog'
+      format:
+        required: false
+        type: string
+        default: 'keep-a-changelog'
+        description: 'Changelog format: keep-a-changelog, conventional, simple'
+    outputs:
+      changelog-content:
+        description: 'The generated changelog content'
+        value: ${{ jobs.generate-changelog.outputs.changelog-content }}
+      changelog-file:
+        description: 'Path to the changelog file'
+        value: ${{ jobs.generate-changelog.outputs.changelog-file }}
+
+jobs:
+  generate-changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    outputs:
+      changelog-content: ${{ steps.generate.outputs.changelog-content }}
+      changelog-file: ${{ steps.generate.outputs.changelog-file }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Get previous tag
+        id: prev-tag
+        run: |
+          CURRENT_TAG="${{ steps.version.outputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 ${CURRENT_TAG}^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            # First release, use first commit
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          echo "previous-tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          echo "Previous tag: $PREV_TAG"
+
+      - name: Generate changelog content
+        id: generate
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          CURRENT_TAG="${{ steps.version.outputs.version }}"
+          PREV_TAG="${{ steps.prev-tag.outputs.previous-tag }}"
+          DATE=$(date +%Y-%m-%d)
+
+          # Get commits between tags
+          if [ "$PREV_TAG" = "$(git rev-list --max-parents=0 HEAD)" ]; then
+            COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..HEAD)
+          else
+            COMMITS=$(git log --pretty=format:"%h %s" ${PREV_TAG}..${CURRENT_TAG})
+          fi
+
+          # Create changelog based on format
+          case "${{ inputs.format }}" in
+            "keep-a-changelog")
+              # Keep a Changelog format
+              cat > changelog_new.md << 'EOF'
+          ## [${{ steps.version.outputs.version }}] - ${DATE}
+
+          ### Added
+          EOF
+
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ (feat|add)" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Changed" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ (change|update|refactor)" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Fixed" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ fix" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Security" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ (security|sec)" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Deprecated" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ deprecate" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Removed" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ remove" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+              ;;
+
+            "conventional")
+              # Conventional Commits format
+              cat > changelog_new.md << 'EOF'
+          ## ${{ steps.version.outputs.version }} (${DATE})
+
+          ### Features
+          EOF
+
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ feat" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Bug Fixes" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ fix" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Performance Improvements" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ perf" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Refactoring" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ refactor" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Documentation" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ docs" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Code Style" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ style" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Tests" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ test" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Build System" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ build" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### CI/CD" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ ci" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+
+              echo "" >> changelog_new.md
+              echo "### Chores" >> changelog_new.md
+              echo "$COMMITS" | grep -iE "^[a-f0-9]+ chore" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md || echo "" >> changelog_new.md
+              ;;
+
+            "simple")
+              # Simple format
+              cat > changelog_new.md << 'EOF'
+          ## ${{ steps.version.outputs.version }} - ${DATE}
+
+          EOF
+              echo "$COMMITS" | sed 's/^[a-f0-9]* /- /' >> changelog_new.md
+              echo "" >> changelog_new.md
+              ;;
+          esac
+
+          # Update or create CHANGELOG.md
+          OUTPUT_FILE="${{ inputs.output-file }}"
+
+          if [ -f "$OUTPUT_FILE" ]; then
+            # Insert new changelog at the top (after title)
+            if grep -q "^# Changelog" "$OUTPUT_FILE"; then
+              # Has title, insert after it
+              sed -i '/^# Changelog/r changelog_new.md' "$OUTPUT_FILE"
+            else
+              # No title, prepend
+              cat changelog_new.md "$OUTPUT_FILE" > temp.md
+              mv temp.md "$OUTPUT_FILE"
+            fi
+          else
+            # Create new changelog
+            echo "# Changelog" > "$OUTPUT_FILE"
+            echo "" >> "$OUTPUT_FILE"
+            echo "All notable changes to this project will be documented in this file." >> "$OUTPUT_FILE"
+            echo "" >> "$OUTPUT_FILE"
+            cat changelog_new.md >> "$OUTPUT_FILE"
+          fi
+
+          # Set outputs
+          echo "changelog-file=$OUTPUT_FILE" >> $GITHUB_OUTPUT
+
+          # Save changelog content (escape for output)
+          CHANGELOG_CONTENT=$(cat changelog_new.md)
+          echo "changelog-content<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Install git-cliff (alternative tool)
+        run: |
+          cargo install git-cliff || true
+
+      - name: Generate with git-cliff
+        if: hashFiles('.github/cliff.toml') != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          git-cliff --config .github/cliff.toml --output cliff-CHANGELOG.md || true
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog-${{ inputs.language }}
+          path: |
+            ${{ inputs.working-directory }}/${{ inputs.output-file }}
+            ${{ inputs.working-directory }}/cliff-CHANGELOG.md
+          retention-days: 90
+
+      - name: Commit changelog
+        if: inputs.commit-changelog == true
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add ${{ inputs.output-file }}
+            git commit -m "docs: update changelog for ${{ steps.version.outputs.version }}"
+            git push
+          fi
+
+      - name: Generate summary
+        run: |
+          echo "# Changelog Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Format**: ${{ inputs.format }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Output File**: ${{ steps.generate.outputs.changelog-file }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Preview" >> $GITHUB_STEP_SUMMARY
+          echo '```markdown' >> $GITHUB_STEP_SUMMARY
+          cat ${{ inputs.working-directory }}/${{ steps.generate.outputs.changelog-file }} | head -50 >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

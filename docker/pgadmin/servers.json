@@ -1,0 +1,24 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "LLM Cost Ops - Development",
+      "Group": "Development",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "postgres",
+      "Username": "postgres",
+      "SSLMode": "prefer",
+      "Comment": "Development database for LLM Cost Ops"
+    },
+    "2": {
+      "Name": "LLM Cost Ops - Test",
+      "Group": "Testing",
+      "Host": "test-postgres",
+      "Port": 5432,
+      "MaintenanceDB": "postgres",
+      "Username": "test",
+      "SSLMode": "prefer",
+      "Comment": "Test database for LLM Cost Ops"
+    }
+  }
+}

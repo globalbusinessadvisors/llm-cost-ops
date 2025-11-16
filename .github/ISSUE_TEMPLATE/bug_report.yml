@@ -1,0 +1,204 @@
+name: Bug Report
+description: File a bug report to help us improve LLM-CostOps
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug! Please fill out this form as completely as possible.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues to avoid duplicates
+          required: true
+        - label: I have tested with the latest version
+          required: true
+        - label: I have read the documentation
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of the bug
+      placeholder: Describe what happened and what you expected to happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Start the daemon with configuration X
+        2. Send request to endpoint Y
+        3. Observe error Z
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+      placeholder: Describe the expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened
+      placeholder: Describe the actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: LLM-CostOps Version
+      description: Output of `llm-costops --version`
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: rust-version
+    attributes:
+      label: Rust Version
+      description: Output of `rustc --version`
+      placeholder: "rustc 1.75.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Docker Container
+        - Kubernetes
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version
+      description: Specific OS version or distribution
+      placeholder: "Ubuntu 22.04, macOS 14.2, Windows 11"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database Type
+      description: What database are you using?
+      options:
+        - SQLite
+        - PostgreSQL
+        - TimescaleDB
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: database-version
+    attributes:
+      label: Database Version
+      description: Database version
+      placeholder: "PostgreSQL 15.3"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment Mode
+      description: How are you running LLM-CostOps?
+      options:
+        - CLI
+        - Daemon (Standalone)
+        - API Server
+        - Docker
+        - Kubernetes
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration
+      description: Relevant configuration (sanitize secrets!)
+      placeholder: |
+        ```yaml
+        database:
+          url: postgresql://user:***@localhost/db
+
+        api:
+          bind: 0.0.0.0:3000
+        ```
+      render: yaml
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Paste relevant log output
+      placeholder: |
+        ```
+        [2025-01-15T10:30:00Z ERROR llm_cost_ops::api] Failed to process request
+        Error: Database connection failed
+        ```
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or information
+      placeholder: Add any other context about the problem here
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this bug?
+      options:
+        - Critical (System unusable)
+        - High (Major feature broken)
+        - Medium (Feature partially broken)
+        - Low (Minor issue or cosmetic)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to help fix this?
+      options:
+        - label: I would be willing to submit a PR to fix this issue
+          required: false

@@ -1,0 +1,289 @@
+# Staging environment values
+# This file overrides values.yaml for staging deployments
+
+# Multiple replicas for staging
+replicaCount: 2
+
+# Staging image settings
+image:
+  pullPolicy: IfNotPresent
+  tag: "staging"
+
+# Pod annotations for staging
+podAnnotations:
+  environment: "staging"
+
+# Moderate resources for staging
+resources:
+  limits:
+    cpu: 750m
+    memory: 768Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# Enable autoscaling in staging
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 75
+
+# Enable Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Staging ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+  hosts:
+    - host: llm-cost-ops-staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: llm-cost-ops-staging-tls
+      hosts:
+        - llm-cost-ops-staging.example.com
+
+# Application configuration for staging
+config:
+  # API configuration
+  api:
+    enableCors: true
+    enableLogging: true
+    requestTimeoutSecs: 45
+    enableCompression: true
+
+  # Database configuration - use PostgreSQL
+  database:
+    type: "postgres"
+    host: "llm-cost-ops-postgres"
+    port: 5432
+    name: "llm_cost_ops_staging"
+    user: "postgres"
+    existingSecret: "llm-cost-ops-db-secret"
+    existingSecretPasswordKey: "password"
+    poolSize: 15
+    maxLifetime: 1800
+    sslMode: "require"
+
+  # Logging configuration
+  logging:
+    level: "info"
+    format: "json"
+    color: false
+    enableFile: true
+    filePath: "/var/log/llm-cost-ops/app.log"
+
+  # Metrics configuration
+  metrics:
+    enabled: true
+    port: 9090
+    enableProcess: true
+    enableRuntime: true
+
+  # Tracing configuration
+  tracing:
+    enabled: true
+    backend: "jaeger"
+    jaeger:
+      endpoint: "http://jaeger-collector:14268/api/traces"
+    samplingRate: 0.5  # Sample 50% in staging
+
+  # Authentication
+  auth:
+    enabled: true
+    jwt:
+      existingSecret: "llm-cost-ops-jwt-secret"
+      existingSecretKey: "jwt-secret"
+      expirationSecs: 86400
+      issuer: "llm-cost-ops-staging"
+    apiKey:
+      enabled: true
+    rbac:
+      enabled: true
+      defaultRole: "viewer"
+
+  # Rate limiting
+  rateLimit:
+    enabled: true
+    requestsPerSec: 200
+    burstSize: 400
+    storage: "redis"
+    redis:
+      url: "redis://llm-cost-ops-redis:6379"
+
+  # Ingestion configuration
+  ingestion:
+    enabled: true
+    batchSize: 500
+    flushInterval: 30
+
+  # Streaming
+  streaming:
+    enabled: true
+    backend: "nats"
+    nats:
+      url: "nats://llm-cost-ops-nats:4222"
+      cluster: "llm-cost-ops-staging"
+
+  # DLQ configuration
+  dlq:
+    enabled: true
+    maxRetries: 3
+    storage: "database"
+
+  # Export configuration
+  export:
+    enabled: true
+    directory: "/data/exports"
+    maxSizeMB: 100
+    scheduling:
+      enabled: true
+      timezone: "UTC"
+    email:
+      enabled: true
+      smtp:
+        host: "smtp.example.com"
+        port: 587
+        user: "noreply@example.com"
+        existingSecret: "llm-cost-ops-smtp-secret"
+        existingSecretPasswordKey: "smtp-password"
+        from: "noreply@example.com"
+        useTLS: true
+
+  # Forecasting configuration
+  forecasting:
+    enabled: true
+    windowDays: 30
+    anomalyDetection: true
+
+  # Budget alerts
+  budgetAlerts:
+    enabled: true
+    checkInterval: 3600
+    thresholds:
+      - 50
+      - 75
+      - 90
+      - 100
+
+# Environment variables for staging
+env:
+  - name: ENVIRONMENT
+    value: "staging"
+  - name: RUST_LOG
+    value: "info,sqlx=warn"
+  - name: RUST_BACKTRACE
+    value: "1"
+
+# Persistence - enabled in staging
+persistence:
+  enabled: true
+  storageClass: "standard"
+  size: 20Gi
+  accessModes:
+    - ReadWriteOnce
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    username: postgres
+    existingSecret: "llm-cost-ops-db-secret"
+    database: llm_cost_ops_staging
+  primary:
+    persistence:
+      enabled: true
+      storageClass: "standard"
+      size: 20Gi
+    resources:
+      limits:
+        cpu: 750m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+# Redis configuration
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    existingSecret: "llm-cost-ops-redis-secret"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  persistence:
+    enabled: true
+    storageClass: "standard"
+    size: 5Gi
+
+# NATS configuration
+nats:
+  enabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  jetstream:
+    enabled: true
+    storage:
+      size: 10Gi
+      storageClass: "standard"
+
+# ServiceMonitor configuration
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  labels:
+    environment: staging
+
+# Network Policy - enabled in staging
+networkPolicy:
+  enabled: true
+
+# Affinity for high availability
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - llm-cost-ops
+          topologyKey: kubernetes.io/hostname
+
+# Topology spread constraints
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: llm-cost-ops
+
+# Jobs configuration
+jobs:
+  migration:
+    enabled: true
+    backoffLimit: 3
+    ttlSecondsAfterFinished: 600

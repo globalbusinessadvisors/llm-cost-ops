@@ -1,0 +1,71 @@
+name: "Stale Issue Management"
+
+on:
+  schedule:
+    # Run daily at 1:00 AM UTC
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+          # Stale issues
+          stale-issue-message: |
+            This issue has been automatically marked as stale because it has not had recent activity.
+            It will be closed in 14 days if no further activity occurs.
+
+            If you believe this issue is still relevant, please comment to keep it open.
+            Thank you for your contributions!
+
+          close-issue-message: |
+            This issue has been automatically closed due to inactivity.
+
+            If you believe this issue should remain open, please reopen it and provide additional context.
+            Thank you for your understanding!
+
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: "stale"
+          close-issue-label: "auto-closed"
+          exempt-issue-labels: "pinned,security,bug,enhancement,help wanted,good first issue"
+
+          # Stale PRs
+          stale-pr-message: |
+            This pull request has been automatically marked as stale because it has not had recent activity.
+            It will be closed in 7 days if no further activity occurs.
+
+            If you plan to continue working on this PR, please comment or push new commits.
+            Thank you for your contributions!
+
+          close-pr-message: |
+            This pull request has been automatically closed due to inactivity.
+
+            If you would like to resume work on this PR, please reopen it and rebase on the latest main branch.
+            Thank you for your contributions!
+
+          days-before-pr-stale: 30
+          days-before-pr-close: 7
+          stale-pr-label: "stale"
+          close-pr-label: "auto-closed"
+          exempt-pr-labels: "pinned,security,work-in-progress,blocked"
+
+          # Operations per run
+          operations-per-run: 100
+
+          # Assignees
+          exempt-assignees: true
+
+          # Milestones
+          exempt-milestones: true
+
+          # Draft PRs
+          exempt-draft-pr: true

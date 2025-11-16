@@ -1,0 +1,107 @@
+# LLM Cost Ops Configuration Template
+# Copy this file to config.toml and customize for your environment
+
+[server]
+host = "${SERVER_HOST:-0.0.0.0}"
+port = ${SERVER_PORT:-8080}
+workers = ${SERVER_WORKERS:-4}
+max_connections = ${SERVER_MAX_CONNECTIONS:-1000}
+
+[database]
+# PostgreSQL: postgres://user:password@host:port/database
+# SQLite: sqlite:///path/to/database.db
+url = "${DATABASE_URL:-sqlite:///app/data/llm-cost-ops.db}"
+max_connections = ${DATABASE_MAX_CONNECTIONS:-10}
+min_connections = ${DATABASE_MIN_CONNECTIONS:-2}
+connection_timeout = ${DATABASE_CONNECTION_TIMEOUT:-30}
+idle_timeout = ${DATABASE_IDLE_TIMEOUT:-600}
+
+[auth]
+# JWT configuration
+jwt_secret = "${JWT_SECRET}"
+jwt_expiration = ${JWT_EXPIRATION:-3600}
+jwt_refresh_expiration = ${JWT_REFRESH_EXPIRATION:-86400}
+jwt_issuer = "${JWT_ISSUER:-llm-cost-ops}"
+jwt_audience = "${JWT_AUDIENCE:-llm-cost-ops-api}"
+
+# API Keys
+api_key_header = "${API_KEY_HEADER:-X-API-Key}"
+api_key_expiration = ${API_KEY_EXPIRATION:-0}
+
+[logging]
+level = "${LOG_LEVEL:-info}"
+format = "${LOG_FORMAT:-json}"
+output = "${LOG_OUTPUT:-stdout}"
+file_path = "${LOG_FILE_PATH:-/app/logs/llm-cost-ops.log}"
+max_file_size = "${LOG_MAX_FILE_SIZE:-100MB}"
+max_backups = ${LOG_MAX_BACKUPS:-10}
+
+[metrics]
+enabled = ${METRICS_ENABLED:-true}
+port = ${METRICS_PORT:-9090}
+path = "${METRICS_PATH:-/metrics}"
+
+[observability]
+# Prometheus
+prometheus_enabled = ${PROMETHEUS_ENABLED:-true}
+prometheus_port = ${PROMETHEUS_PORT:-9090}
+
+# Jaeger tracing
+tracing_enabled = ${TRACING_ENABLED:-false}
+jaeger_endpoint = "${JAEGER_ENDPOINT:-http://jaeger:14268/api/traces}"
+
+# Logging
+log_level = "${LOG_LEVEL:-info}"
+log_format = "${LOG_FORMAT:-json}"
+
+[ratelimit]
+enabled = ${RATELIMIT_ENABLED:-true}
+max_requests = ${RATELIMIT_MAX_REQUESTS:-100}
+window_seconds = ${RATELIMIT_WINDOW_SECONDS:-60}
+burst = ${RATELIMIT_BURST:-150}
+
+[cors]
+enabled = ${CORS_ENABLED:-true}
+allowed_origins = "${CORS_ALLOWED_ORIGINS:-*}"
+allowed_methods = "${CORS_ALLOWED_METHODS:-GET,POST,PUT,DELETE,PATCH,OPTIONS}"
+allowed_headers = "${CORS_ALLOWED_HEADERS:-*}"
+max_age = ${CORS_MAX_AGE:-3600}
+
+[export]
+# S3 configuration
+s3_enabled = ${S3_ENABLED:-false}
+s3_bucket = "${S3_BUCKET}"
+s3_region = "${S3_REGION:-us-east-1}"
+s3_access_key = "${S3_ACCESS_KEY}"
+s3_secret_key = "${S3_SECRET_KEY}"
+
+# Email configuration
+email_enabled = ${EMAIL_ENABLED:-false}
+smtp_host = "${SMTP_HOST}"
+smtp_port = ${SMTP_PORT:-587}
+smtp_username = "${SMTP_USERNAME}"
+smtp_password = "${SMTP_PASSWORD}"
+smtp_from = "${SMTP_FROM:-noreply@llm-cost-ops.dev}"
+
+[forecasting]
+enabled = ${FORECASTING_ENABLED:-true}
+default_horizon_days = ${FORECASTING_HORIZON_DAYS:-30}
+confidence_level = ${FORECASTING_CONFIDENCE_LEVEL:-0.95}
+
+[compliance]
+# GDPR
+gdpr_enabled = ${GDPR_ENABLED:-true}
+data_retention_days = ${DATA_RETENTION_DAYS:-2555}
+
+# Audit logging
+audit_enabled = ${AUDIT_ENABLED:-true}
+audit_retention_days = ${AUDIT_RETENTION_DAYS:-2555}
+
+[redis]
+enabled = ${REDIS_ENABLED:-false}
+url = "${REDIS_URL:-redis://redis:6379}"
+pool_size = ${REDIS_POOL_SIZE:-10}
+
+[nats]
+enabled = ${NATS_ENABLED:-false}
+url = "${NATS_URL:-nats://nats:4222}"

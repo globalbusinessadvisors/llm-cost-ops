@@ -1,0 +1,213 @@
+name: TypeScript SDK - Test
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/sdk-typescript-test.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'sdk/**'
+      - '.github/workflows/sdk-typescript-test.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: ./sdk
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node }} - ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type checking
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./sdk/coverage/coverage-final.json
+          flags: typescript-sdk
+          name: typescript-sdk
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Archive coverage reports
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: sdk/coverage/
+          retention-days: 7
+
+  build:
+    name: Build & Validate (Node ${{ matrix.node }} - ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Verify build outputs
+        shell: bash
+        run: |
+          echo "Checking build artifacts..."
+          test -f dist/index.js || (echo "CJS build missing" && exit 1)
+          test -f dist/index.mjs || (echo "ESM build missing" && exit 1)
+          test -f dist/index.d.ts || (echo "Type declarations missing" && exit 1)
+          echo "All build artifacts present ✓"
+
+      - name: Check bundle size
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
+        run: |
+          echo "Bundle sizes:"
+          du -h dist/index.js
+          du -h dist/index.mjs
+
+          # Warning if bundle exceeds 100KB (uncompressed)
+          SIZE=$(stat -f%z dist/index.mjs 2>/dev/null || stat -c%s dist/index.mjs)
+          if [ $SIZE -gt 102400 ]; then
+            echo "::warning::ESM bundle size ($SIZE bytes) exceeds 100KB"
+          fi
+
+      - name: Test package exports (ESM)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          node --input-type=module -e "
+            import pkg from './dist/index.mjs';
+            console.log('ESM import successful:', typeof pkg);
+          "
+
+      - name: Test package exports (CJS)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          node -e "
+            const pkg = require('./dist/index.js');
+            console.log('CJS import successful:', typeof pkg);
+          "
+
+      - name: Archive build artifacts
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: sdk/dist/
+          retention-days: 7
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test, build]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build package
+        run: npm run build
+
+      - name: Pack package
+        run: npm pack
+
+      - name: Test package installation
+        run: |
+          mkdir -p /tmp/test-install
+          cd /tmp/test-install
+          npm init -y
+          npm install ${{ github.workspace }}/sdk/llm-cost-ops-sdk-*.tgz
+          node -e "const sdk = require('@llm-cost-ops/sdk'); console.log('Package installed successfully:', !!sdk);"
+
+  all-tests-passed:
+    name: All Tests Passed
+    if: always()
+    needs: [test, build, integration-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check test results
+        run: |
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "Test job failed"
+            exit 1
+          fi
+          if [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "Build job failed"
+            exit 1
+          fi
+          if [[ "${{ needs.integration-test.result }}" != "success" ]]; then
+            echo "Integration test job failed"
+            exit 1
+          fi
+          echo "All tests passed successfully!"

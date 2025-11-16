@@ -1,0 +1,255 @@
+name: Documentation Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - 'docs/**'
+      - '.github/workflows/docs-deploy.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'website/**'
+      - 'docs/**'
+      - '.github/workflows/docs-deploy.yml'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Check links and validate documentation
+  validate:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./website
+        run: npm ci
+
+      - name: Type checking
+        working-directory: ./website
+        run: npm run typecheck
+
+      - name: Lint code
+        working-directory: ./website
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Format check
+        working-directory: ./website
+        run: npm run format:check
+        continue-on-error: true
+
+      - name: Build documentation
+        working-directory: ./website
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-build
+          path: website/build
+          retention-days: 7
+
+  # Deploy to GitHub Pages
+  deploy-github-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./website
+        run: npm ci
+
+      - name: Build documentation
+        working-directory: ./website
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # Deploy to Netlify
+  deploy-netlify:
+    name: Deploy to Netlify
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: netlify-production
+      url: ${{ steps.netlify-deploy.outputs.deploy-url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./website
+        run: npm ci
+
+      - name: Build documentation
+        working-directory: ./website
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Deploy to Netlify
+        id: netlify-deploy
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: './website/build'
+          production-branch: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: 'Deploy from GitHub Actions - ${{ github.event.head_commit.message }}'
+          enable-pull-request-comment: true
+          enable-commit-comment: true
+          overwrites-pull-request-comment: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 5
+
+  # Deploy preview for pull requests on Netlify
+  deploy-netlify-preview:
+    name: Deploy Netlify Preview
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'pull_request'
+    environment:
+      name: netlify-preview
+      url: ${{ steps.netlify-deploy.outputs.deploy-url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./website
+        run: npm ci
+
+      - name: Build documentation
+        working-directory: ./website
+        run: npm run build
+
+      - name: Deploy Preview to Netlify
+        id: netlify-deploy
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: './website/build'
+          production-branch: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: 'Preview Deploy from PR #${{ github.event.pull_request.number }}'
+          enable-pull-request-comment: true
+          enable-commit-comment: false
+          overwrites-pull-request-comment: true
+          alias: pr-${{ github.event.pull_request.number }}
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 5
+
+  # Link checking job (runs after deployment)
+  link-check:
+    name: Check Links
+    runs-on: ubuntu-latest
+    needs: [deploy-github-pages]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check external links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --verbose --no-progress --exclude-all-private './website/build/**/*.html'
+          fail: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Issue From File
+        if: failure()
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: 'Documentation: Broken Links Detected'
+          content-filepath: ./lychee/out.md
+          labels: documentation, broken-links
+
+  # Performance check
+  lighthouse:
+    name: Lighthouse Performance Check
+    runs-on: ubuntu-latest
+    needs: [deploy-github-pages]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Lighthouse
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: |
+            https://docs.llm-cost-ops.dev
+            https://docs.llm-cost-ops.dev/docs/intro
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Comment PR with Lighthouse results
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: lighthouse
+          path: '.lighthouseci/results.json'

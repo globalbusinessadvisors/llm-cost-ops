@@ -1,0 +1,78 @@
+{
+  "name": "@llm-cost-ops/sdk",
+  "version": "1.0.0",
+  "description": "Enterprise-grade TypeScript SDK for LLM Cost Operations Platform",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run typecheck && npm run lint",
+    "verify": "npm run typecheck && npm run lint && npm run test"
+  },
+  "keywords": [
+    "llm",
+    "cost",
+    "operations",
+    "monitoring",
+    "typescript",
+    "sdk",
+    "enterprise"
+  ],
+  "author": "LLM DevOps Team",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/llm-devops/llm-cost-ops"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@typescript-eslint/eslint-plugin": "^6.16.0",
+    "@typescript-eslint/parser": "^6.16.0",
+    "@vitest/coverage-v8": "^1.1.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "prettier": "^3.1.1",
+    "rimraf": "^5.0.5",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  },
+  "dependencies": {
+    "eventemitter3": "^5.0.1"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  }
+}

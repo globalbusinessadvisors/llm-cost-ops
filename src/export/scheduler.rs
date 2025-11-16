@@ -9,10 +9,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use super::config::{ScheduledReportConfig, ReportFiltersConfig};
-use super::delivery::{DeliveryCoordinator, DeliveryRequest, DeliveryResponse};
+use super::delivery::{DeliveryCoordinator, DeliveryResponse};
 use super::reports::{ReportGenerator, ReportRequest, ReportFilters};
 use super::{ExportError, ExportResult};
 
@@ -150,7 +150,7 @@ impl CronScheduler {
             }
 
             // Calculate next execution time in the configured timezone
-            let now_tz = now.with_timezone(&entry.timezone);
+            let _now_tz = now.with_timezone(&entry.timezone);
             if let Some(next_run) = entry.status.next_run {
                 if now >= next_run {
                     // Time to execute
@@ -434,7 +434,8 @@ mod tests {
 
     #[test]
     fn test_parse_schedule() {
-        let schedule = CronScheduler::parse_schedule("0 0 * * *");
+        // cron crate expects 6 or 7 fields (sec min hour day month weekday [year])
+        let schedule = CronScheduler::parse_schedule("0 0 0 * * *");
         assert!(schedule.is_ok());
 
         let invalid = CronScheduler::parse_schedule("invalid");
@@ -462,7 +463,7 @@ mod tests {
         let config = ScheduledReportConfig {
             id: "test-schedule".to_string(),
             report_type: super::super::reports::ReportType::Cost,
-            schedule: "0 0 * * *".to_string(),
+            schedule: "0 0 0 * * *".to_string(), // sec min hour day month weekday
             format: super::super::formats::ExportFormat::Csv,
             delivery: vec![DeliveryTarget::Storage { path: None }],
             filters: ReportFiltersConfig::default(),
@@ -492,7 +493,7 @@ mod tests {
         let config = ScheduledReportConfig {
             id: "test-schedule-2".to_string(),
             report_type: super::super::reports::ReportType::Usage,
-            schedule: "0 0 * * *".to_string(),
+            schedule: "0 0 0 * * *".to_string(), // sec min hour day month weekday
             format: super::super::formats::ExportFormat::Json,
             delivery: vec![],
             filters: ReportFiltersConfig::default(),

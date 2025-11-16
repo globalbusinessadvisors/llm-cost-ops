@@ -9,7 +9,7 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use super::config::{DeliveryTarget, EmailConfig, LocalStorageConfig, S3StorageConfig, StorageBackend, StorageConfig};
 use super::formats::ExportFormat;
@@ -255,7 +255,7 @@ impl StorageDelivery {
 
     async fn save_local(
         &self,
-        local_config: &LocalStorageConfig,
+        _local_config: &LocalStorageConfig,
         file_path: PathBuf,
         data: Bytes,
     ) -> ExportResult<PathBuf> {
@@ -503,7 +503,7 @@ impl DeliveryCoordinator {
                 .iter()
                 .find(|d| d.supports(&target))
                 .ok_or_else(|| {
-                    ExportError::DeliveryError(format!("No delivery method found for target"))
+                    ExportError::DeliveryError("No delivery method found for target".to_string())
                 })?;
 
             let request = DeliveryRequest {
@@ -530,6 +530,7 @@ impl Default for DeliveryCoordinator {
 mod tests {
     use super::*;
     use crate::export::reports::{DateRange, ReportSummary};
+    use crate::{ExportData, ReportType};
 
     fn create_test_report() -> ReportResponse {
         let mut data = ExportData::new(vec!["Name".to_string(), "Value".to_string()]);

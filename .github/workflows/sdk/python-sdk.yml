@@ -1,0 +1,261 @@
+name: Python SDK - CI/CD
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+    paths:
+      - 'sdks/python/**'
+      - '.github/workflows/sdk/python-sdk.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'sdks/python/**'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      run-tests:
+        description: 'Run test suite'
+        required: false
+        type: boolean
+        default: true
+      run-publish:
+        description: 'Publish to PyPI'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.12'
+  WORKING_DIR: 'sdks/python'
+
+jobs:
+  # Test matrix across multiple Python versions and OS
+  test:
+    name: Test Python SDK
+    if: github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || inputs.run-tests)
+    uses: ./.github/workflows/reusable/test-matrix.yml
+    with:
+      language: python
+      test-command: 'pytest -v --cov=llm_cost_ops --cov-report=xml --cov-report=html'
+      working-directory: 'sdks/python'
+      matrix-os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+      matrix-versions: '["3.9", "3.10", "3.11", "3.12"]'
+      coverage-enabled: true
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Code quality and linting
+  quality:
+    name: Code Quality
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    uses: ./.github/workflows/reusable/lint-quality.yml
+    with:
+      language: python
+      working-directory: 'sdks/python'
+
+  # Security scanning
+  security:
+    name: Security Scan
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    uses: ./.github/workflows/reusable/security-scan.yml
+    with:
+      language: python
+      working-directory: 'sdks/python'
+      enable-codeql: true
+      enable-sast: true
+      enable-dependency-scan: true
+      enable-secret-scan: true
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  # Integration tests against live API
+  integration-tests:
+    name: Integration Tests
+    needs: [test, quality]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[test,integration]"
+
+      - name: Run integration tests
+        working-directory: ${{ env.WORKING_DIR }}
+        env:
+          LLM_COST_OPS_API_KEY: ${{ secrets.LLM_COST_OPS_TEST_API_KEY }}
+          LLM_COST_OPS_BASE_URL: ${{ secrets.LLM_COST_OPS_TEST_BASE_URL }}
+        run: pytest tests/integration/ -v --maxfail=3
+
+  # Documentation build
+  docs:
+    name: Build Documentation
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[docs]"
+          pip install sphinx sphinx-rtd-theme sphinx-autodoc-typehints
+
+      - name: Build documentation
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cd docs
+          make html
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sdk-docs
+          path: ${{ env.WORKING_DIR }}/docs/_build/html
+          retention-days: 30
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ env.WORKING_DIR }}/docs/_build/html
+          destination_dir: sdk/python
+
+  # Performance benchmarks
+  benchmarks:
+    name: Performance Benchmarks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[test]"
+          pip install pytest-benchmark
+
+      - name: Run benchmarks
+        working-directory: ${{ env.WORKING_DIR }}
+        run: pytest tests/benchmarks/ --benchmark-json=benchmark.json
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'pytest'
+          output-file-path: ${{ env.WORKING_DIR }}/benchmark.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '150%'
+
+  # Release automation
+  release:
+    name: Create Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]')
+    needs: [test, quality, security, integration-tests]
+    uses: ./.github/workflows/reusable/release-automation.yml
+    with:
+      language: python
+      working-directory: 'sdks/python'
+      version-bump: 'auto'
+      changelog-generate: true
+      create-github-release: true
+      trigger-publish: true
+
+  # Publish to PyPI
+  publish:
+    name: Publish to PyPI
+    if: |
+      (github.event_name == 'release' && github.event.action == 'published') ||
+      (github.event_name == 'workflow_dispatch' && inputs.run-publish)
+    needs: [test, quality, security]
+    uses: ./.github/workflows/reusable/publish-package.yml
+    with:
+      language: python
+      working-directory: 'sdks/python'
+      package-name: 'llm-cost-ops-sdk'
+      dry-run: false
+      pre-publish-command: 'python -m build'
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  # Notify on completion
+  notify:
+    name: Notify on Completion
+    needs: [test, quality, security]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create job summary
+        run: |
+          echo "# Python SDK CI/CD Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Test: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Quality: ${{ needs.quality.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Send Slack notification
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Python SDK CI/CD failed for commit ${{ github.sha }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Python SDK CI/CD *failed* :x:\n*Repository:* ${{ github.repository }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.sha }}"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Workflow"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

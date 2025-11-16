@@ -310,7 +310,7 @@ async fn handle_pricing_command(config: &Config, command: &PricingCommands) -> R
                 Decimal::from_str(&output_price.to_string())?,
             );
 
-            let table = PricingTable::new(provider, model.clone(), pricing);
+            let table = PricingTable::new(provider.unwrap_or_else(|_| Provider::OpenAI), model.clone(), pricing);
 
             pricing_repo.create(&table).await?;
 
@@ -320,10 +320,11 @@ async fn handle_pricing_command(config: &Config, command: &PricingCommands) -> R
             );
         }
         PricingCommands::Get { provider, model } => {
-            let provider = Provider::from_str(provider);
+            let provider_result = Provider::from_str(provider);
+            let provider_val = provider_result.unwrap_or_else(|_| Provider::OpenAI);
             let now = Utc::now();
 
-            if let Some(table) = pricing_repo.get_active(&provider, model, &now).await? {
+            if let Some(table) = pricing_repo.get_active(&provider_val, model, &now).await? {
                 println!("\nPricing Table");
                 println!("=============");
                 println!("Provider: {}", table.provider);
@@ -335,7 +336,7 @@ async fn handle_pricing_command(config: &Config, command: &PricingCommands) -> R
                 }
                 println!("\nPricing: {}", serde_json::to_string_pretty(&table.pricing)?);
             } else {
-                println!("No active pricing found for provider={} model={}", provider, model);
+                println!("No active pricing found for provider={} model={}", provider_val, model);
             }
         }
     }

@@ -267,14 +267,16 @@ mod tests {
 
     #[test]
     fn test_compression_levels() {
-        let data = TEST_DATA.as_bytes();
+        // Use larger data to ensure compression overhead doesn't skew results
+        let large_data = TEST_DATA.repeat(100);
 
         let (fast, _) =
-            compress(data, CompressionAlgorithm::Gzip, CompressionLevel::Fastest).unwrap();
+            compress(large_data.as_bytes(), CompressionAlgorithm::Gzip, CompressionLevel::Fastest).unwrap();
         let (best, _) =
-            compress(data, CompressionAlgorithm::Gzip, CompressionLevel::Best).unwrap();
+            compress(large_data.as_bytes(), CompressionAlgorithm::Gzip, CompressionLevel::Best).unwrap();
 
-        // Best compression should produce smaller or equal output
+        // Best compression should produce smaller or equal output for large data
+        // For small data, compression overhead can make "best" larger than "fastest"
         assert!(best.len() <= fast.len());
     }
 

@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::{migrate::MigrateDatabase, Pool, Sqlite};
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::info;
+
+#[cfg(feature = "postgres")]
+use tracing::warn;
 
 #[cfg(feature = "postgres")]
 use sqlx::Postgres;
@@ -224,7 +227,7 @@ impl SqlitePool {
     /// Get pool statistics
     pub fn stats(&self) -> PoolStats {
         PoolStats {
-            connections: self.pool.size() as u32,
+            connections: self.pool.size(),
             idle_connections: self.pool.num_idle() as u32,
         }
     }
@@ -444,7 +447,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sqlite_pool_creation() {
-        let config = DatabaseConfig::sqlite_memory();
+        let mut config = DatabaseConfig::sqlite_memory();
+        config.run_migrations = false; // Disable migrations for test
+
         let pool = SqlitePool::new(&config).await;
         assert!(pool.is_ok());
 

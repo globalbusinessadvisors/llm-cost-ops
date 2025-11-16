@@ -28,7 +28,7 @@ pub enum MetricsError {
 /// Global metrics registry
 pub struct MetricsRegistry {
     registry: Arc<Registry>,
-    config: MetricsConfig,
+    _config: MetricsConfig,
 
     // Request metrics
     pub http_requests_total: IntCounterVec,
@@ -517,7 +517,7 @@ impl MetricsRegistry {
 
         Ok(Self {
             registry: Arc::new(registry),
-            config,
+            _config: config,
             http_requests_total,
             http_request_duration_seconds,
             http_request_size_bytes,

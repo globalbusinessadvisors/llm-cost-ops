@@ -1,0 +1,26 @@
+apiVersion: v2
+name: llm-cost-ops
+description: A Helm chart for LLM Cost Operations Platform - Cost tracking, monitoring, and optimization for LLM deployments
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - llm
+  - cost
+  - operations
+  - monitoring
+  - finops
+  - ai
+  - machine-learning
+home: https://github.com/llm-devops/llm-cost-ops
+sources:
+  - https://github.com/llm-devops/llm-cost-ops
+maintainers:
+  - name: LLM DevOps Team
+    email: devops@llm-cost-ops.io
+icon: https://llm-cost-ops.io/icon.png
+kubeVersion: ">=1.24.0-0"
+dependencies: []
+annotations:
+  category: Analytics
+  licenses: Apache-2.0

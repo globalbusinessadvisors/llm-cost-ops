@@ -1,0 +1,113 @@
+# Prometheus Alert Rules for LLM Cost Ops
+# Version: 1.0.0
+
+groups:
+  # Application Health Alerts
+  - name: application_health
+    interval: 30s
+    rules:
+      - alert: ApplicationDown
+        expr: up{job="llm-cost-ops-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Application instance {{ $labels.instance }} is down"
+          description: "Application instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value }} errors per second on {{ $labels.instance }}"
+
+      - alert: SlowResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow API response time"
+          description: "95th percentile response time is {{ $value }}s on {{ $labels.instance }}"
+
+  # Database Alerts
+  - name: database_health
+    interval: 30s
+    rules:
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL database has been down for more than 1 minute."
+
+      - alert: HighDatabaseConnections
+        expr: pg_stat_database_numbackends > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of database connections"
+          description: "Database has {{ $value }} active connections"
+
+  # Cache Alerts
+  - name: cache_health
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis has been down for more than 1 minute."
+
+      - alert: HighCacheEvictionRate
+        expr: rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High cache eviction rate"
+          description: "Cache is evicting {{ $value }} keys per second"
+
+  # Message Broker Alerts
+  - name: message_broker_health
+    interval: 30s
+    rules:
+      - alert: NatsDown
+        expr: up{job="nats"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NATS server is down"
+          description: "NATS has been down for more than 1 minute."
+
+  # Resource Usage Alerts
+  - name: resource_usage
+    interval: 30s
+    rules:
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 > 1024
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Process {{ $labels.instance }} is using {{ $value }}MB of memory"
+
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "Process {{ $labels.instance }} CPU usage is {{ $value }}"

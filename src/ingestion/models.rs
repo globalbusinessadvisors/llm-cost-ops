@@ -299,7 +299,7 @@ impl UsageWebhookPayload {
         crate::domain::UsageRecord {
             id: self.request_id,
             timestamp: self.timestamp,
-            provider: Provider::from_str(&self.provider),
+            provider: Provider::parse(&self.provider),
             model: ModelIdentifier {
                 name: self.model.name.clone(),
                 version: self.model.version.clone(),

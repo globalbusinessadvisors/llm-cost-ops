@@ -1,0 +1,51 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module",
+    "project": "./tsconfig.json"
+  },
+  "plugins": ["@typescript-eslint", "import"],
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:@typescript-eslint/recommended-requiring-type-checking",
+    "plugin:import/recommended",
+    "plugin:import/typescript",
+    "prettier"
+  ],
+  "rules": {
+    "@typescript-eslint/explicit-function-return-type": "error",
+    "@typescript-eslint/no-explicit-any": "error",
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/strict-boolean-expressions": ["error", {
+      "allowString": false,
+      "allowNumber": false,
+      "allowNullableObject": true,
+      "allowNullableBoolean": false,
+      "allowNullableString": false,
+      "allowNullableNumber": false,
+      "allowAny": false
+    }],
+    "@typescript-eslint/no-floating-promises": "error",
+    "@typescript-eslint/no-misused-promises": "error",
+    "import/order": "off",
+    "import/no-unresolved": "off",
+    "import/namespace": "off",
+    "import/export": "off",
+    "import/default": "off",
+    "import/no-duplicates": "off",
+    "import/no-named-as-default": "off",
+    "import/no-named-as-default-member": "off",
+    "no-console": ["warn", { "allow": ["warn", "error"] }]
+  },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "alwaysTryTypes": true,
+        "project": "./tsconfig.json"
+      }
+    }
+  }
+}

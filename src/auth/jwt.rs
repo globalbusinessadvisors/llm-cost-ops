@@ -172,8 +172,8 @@ impl JwtManager {
     /// Validate and decode a token
     pub fn validate_token(&self, token: &str) -> AuthResult<JwtClaims> {
         let mut validation = Validation::new(self.algorithm);
-        validation.set_issuer(&[self.config.jwt.issuer.clone()]);
-        validation.set_audience(&[self.config.jwt.audience.clone()]);
+        validation.set_issuer(std::slice::from_ref(&self.config.jwt.issuer));
+        validation.set_audience(std::slice::from_ref(&self.config.jwt.audience));
 
         let token_data = decode::<JwtClaims>(token, &self.decoding_key, &validation)
             .map_err(|e| match e.kind() {

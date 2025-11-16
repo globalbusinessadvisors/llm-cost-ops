@@ -1,0 +1,441 @@
+name: Python SDK - Security
+
+on:
+  schedule:
+    # Run weekly on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'python-sdk/**'
+      - '.github/workflows/sdk-python-security.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'python-sdk/**'
+  workflow_dispatch:
+
+env:
+  WORKING_DIR: python-sdk
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # Dependency vulnerability scanning
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: ${{ env.WORKING_DIR }}/pyproject.toml
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install safety pip-audit
+
+      - name: Run Safety check
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true
+        run: |
+          echo "::group::Safety Vulnerability Check"
+          safety check --json --output safety-report.json || true
+          safety check --full-report
+          echo "::endgroup::"
+
+      - name: Run pip-audit
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true
+        run: |
+          echo "::group::Pip Audit"
+          pip-audit --format json --output pip-audit-report.json || true
+          pip-audit --desc
+          echo "::endgroup::"
+
+      - name: Upload dependency scan reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-scan-reports
+          path: |
+            ${{ env.WORKING_DIR }}/safety-report.json
+            ${{ env.WORKING_DIR }}/pip-audit-report.json
+          retention-days: 90
+
+      - name: Create issue for vulnerabilities
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const safetyReport = JSON.parse(fs.readFileSync('${{ env.WORKING_DIR }}/safety-report.json', 'utf8'));
+
+            const title = `[Security] Dependency vulnerabilities found - ${new Date().toISOString().split('T')[0]}`;
+            const body = `## Dependency Vulnerability Scan Results
+
+            Vulnerabilities were found during the weekly security scan.
+
+            **Scan Date**: ${new Date().toISOString()}
+            **Workflow**: ${{ github.workflow }}
+            **Run**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Please review the attached reports and update dependencies as needed.
+
+            ### Next Steps
+            1. Review the vulnerability reports in the workflow artifacts
+            2. Update affected dependencies
+            3. Run tests to ensure compatibility
+            4. Create a PR with the fixes
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['security', 'dependencies', 'python-sdk']
+            });
+
+  # SAST (Static Application Security Testing)
+  sast-scan:
+    name: SAST Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit semgrep
+
+      - name: Run Bandit security scan
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true
+        run: |
+          echo "::group::Bandit Security Scan"
+          bandit -r llm_cost_ops -f json -o bandit-report.json || true
+          bandit -r llm_cost_ops -f screen -ll
+          echo "::endgroup::"
+
+      - name: Run Semgrep
+        working-directory: ${{ env.WORKING_DIR }}
+        continue-on-error: true
+        run: |
+          echo "::group::Semgrep Security Scan"
+          semgrep --config=auto --json --output=semgrep-report.json llm_cost_ops || true
+          semgrep --config=auto llm_cost_ops
+          echo "::endgroup::"
+
+      - name: Upload SAST reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-reports
+          path: |
+            ${{ env.WORKING_DIR }}/bandit-report.json
+            ${{ env.WORKING_DIR }}/semgrep-report.json
+          retention-days: 90
+
+  # Snyk vulnerability scanning
+  snyk-scan:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/python-3.10@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --file=${{ env.WORKING_DIR }}/pyproject.toml --severity-threshold=medium --json-file-output=snyk-report.json
+
+      - name: Upload Snyk report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-report
+          path: snyk-report.json
+          retention-days: 90
+
+      - name: Run Snyk to check for license issues
+        uses: snyk/actions/python-3.10@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --file=${{ env.WORKING_DIR }}/pyproject.toml --json-file-output=snyk-license-report.json -- --license
+
+      - name: Upload Snyk license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-license-report
+          path: snyk-license-report.json
+          retention-days: 90
+
+  # CodeQL analysis
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+
+  # Secret scanning
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for secret scanning
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified --json --output=trufflehog-report.json
+
+      - name: Upload secret scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan-report
+          path: trufflehog-report.json
+          retention-days: 90
+
+  # Generate SBOM (Software Bill of Materials)
+  sbom-generation:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install cyclonedx-bom pip-licenses
+
+      - name: Generate CycloneDX SBOM
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::Generating CycloneDX SBOM"
+          cyclonedx-py -o sbom-cyclonedx.json
+          cyclonedx-py -o sbom-cyclonedx.xml --format xml
+          echo "::endgroup::"
+
+      - name: Generate SPDX SBOM
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::Generating License Report"
+          pip-licenses --format=json --output-file=licenses.json
+          pip-licenses --format=markdown --output-file=licenses.md
+          pip-licenses --format=csv --output-file=licenses.csv
+          echo "::endgroup::"
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            ${{ env.WORKING_DIR }}/sbom-cyclonedx.json
+            ${{ env.WORKING_DIR }}/sbom-cyclonedx.xml
+            ${{ env.WORKING_DIR }}/licenses.json
+            ${{ env.WORKING_DIR }}/licenses.md
+            ${{ env.WORKING_DIR }}/licenses.csv
+          retention-days: 90
+
+      - name: Verify SBOM
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::SBOM Summary"
+          echo "CycloneDX SBOM generated successfully"
+          echo "Total components: $(jq '.components | length' sbom-cyclonedx.json)"
+          echo ""
+          echo "License summary:"
+          cat licenses.md
+          echo "::endgroup::"
+
+  # License compliance check
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pip-licenses licensecheck
+
+      - name: Check licenses
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::License Check"
+          pip-licenses --format=markdown
+          echo "::endgroup::"
+
+      - name: Verify allowed licenses
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "::group::License Compliance"
+          # Define allowed licenses (customize as needed)
+          ALLOWED_LICENSES="MIT|Apache|BSD|ISC|Python Software Foundation|MPL-2.0|LGPL"
+
+          pip-licenses --format=json > all-licenses.json
+
+          # Check for problematic licenses
+          PROBLEMATIC=$(jq -r '.[] | select(.License | test("GPL|AGPL|SSPL|Elastic|Commons Clause") and (test("LGPL|MIT|Apache|BSD") | not)) | "\(.Name): \(.License)"' all-licenses.json)
+
+          if [ -n "$PROBLEMATIC" ]; then
+            echo "::error::Problematic licenses found:"
+            echo "$PROBLEMATIC"
+            exit 1
+          else
+            echo "::notice::All licenses are compliant"
+          fi
+          echo "::endgroup::"
+
+  # Security policy check
+  policy-check:
+    name: Security Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for SECURITY.md
+        run: |
+          if [ ! -f "SECURITY.md" ]; then
+            echo "::warning::SECURITY.md file not found"
+          else
+            echo "::notice::SECURITY.md file found"
+          fi
+
+      - name: Check for security-related files
+        run: |
+          echo "::group::Security File Check"
+
+          FILES=(".github/SECURITY.md" "SECURITY.md" ".github/dependabot.yml")
+
+          for file in "${FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✓ Found: $file"
+            else
+              echo "✗ Missing: $file"
+            fi
+          done
+          echo "::endgroup::"
+
+  # Generate security summary
+  summary:
+    name: Security Summary
+    needs: [dependency-scan, sast-scan, snyk-scan, codeql-analysis, secret-scan, sbom-generation, license-check, policy-check]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create security summary
+        run: |
+          echo "# Python SDK Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependency Scan**: ${{ needs.dependency-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **SAST Scan**: ${{ needs.sast-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Snyk Scan**: ${{ needs.snyk-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CodeQL Analysis**: ${{ needs.codeql-analysis.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Secret Scan**: ${{ needs.secret-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **SBOM Generation**: ${{ needs.sbom-generation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **License Check**: ${{ needs.license-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Policy Check**: ${{ needs.policy-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "Security reports and SBOM are available in workflow artifacts." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review all security scan reports" >> $GITHUB_STEP_SUMMARY
+          echo "2. Address critical and high severity findings" >> $GITHUB_STEP_SUMMARY
+          echo "3. Update vulnerable dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "4. Verify license compliance" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for critical failures
+        if: needs.codeql-analysis.result == 'failure' || needs.secret-scan.result == 'failure'
+        run: |
+          echo "::error::Critical security scans failed"
+          exit 1
+
+      - name: Post security metrics
+        if: github.event_name == 'schedule' || github.event_name == 'push'
+        run: |
+          echo "::notice::Security scan completed. Review artifacts for detailed reports."

@@ -1,0 +1,53 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: llm-cost-ops-prometheus
+  labels:
+    app: llm-cost-ops
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+rules:
+# Allow Prometheus to discover and scrape metrics from pods
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - nodes/metrics
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+
+# Allow access to ingresses for service discovery
+- apiGroups: ["networking.k8s.io"]
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+
+# Allow access to config maps
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+
+# Non-resource URLs for metrics scraping
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: llm-cost-ops-prometheus
+  labels:
+    app: llm-cost-ops
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: llm-cost-ops-prometheus
+subjects:
+- kind: ServiceAccount
+  name: llm-cost-ops-monitoring
+  namespace: llm-cost-ops

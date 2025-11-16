@@ -15,7 +15,7 @@ pub struct NatsConsumer<H: IngestionHandler> {
     client: async_nats::Client,
     subject: String,
     handler: Arc<H>,
-    backoff: ExponentialBackoff<SystemClock>,
+    _backoff: ExponentialBackoff<SystemClock>,
 }
 
 impl<H: IngestionHandler> NatsConsumer<H> {
@@ -44,7 +44,7 @@ impl<H: IngestionHandler> NatsConsumer<H> {
             client,
             subject,
             handler: Arc::new(handler),
-            backoff,
+            _backoff: backoff,
         })
     }
 
@@ -283,7 +283,6 @@ impl<H: IngestionHandler> RedisConsumer<H> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     // Tests would require actual NATS/Redis instances
     // For now, we ensure the code compiles

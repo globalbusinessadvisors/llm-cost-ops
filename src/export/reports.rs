@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::{ExportData, ExportError, ExportResult};
+use super::{ExportData, ExportResult};
 
 /// Report types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

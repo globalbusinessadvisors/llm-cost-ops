@@ -48,7 +48,7 @@ impl ForecastEngine {
     }
 
     /// Create with default configuration
-    pub fn default() -> Self {
+    pub fn new_with_defaults() -> Self {
         Self {
             config: ForecastConfig::default(),
         }
@@ -176,7 +176,7 @@ impl ForecastEngine {
         };
 
         // If strong trend (>5% change), use linear trend
-        if trend_ratio > 1.05 || trend_ratio < 0.95 {
+        if !(0.95..=1.05).contains(&trend_ratio) {
             Ok(ModelType::LinearTrend)
         } else if data.len() >= 10 {
             // Use moving average for stable data with enough points
@@ -409,7 +409,7 @@ impl ForecastEngine {
 
 impl Default for ForecastEngine {
     fn default() -> Self {
-        Self::default()
+        Self::new_with_defaults()
     }
 }
 

@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/yourusername/llm-cost-ops/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: Discord Community
+    url: https://discord.gg/example
+    about: Join our Discord server for real-time chat and support
+  - name: Security Vulnerability
+    url: https://github.com/yourusername/llm-cost-ops/security/advisories/new
+    about: Report security vulnerabilities privately (do not use public issues)
+  - name: Documentation
+    url: https://docs.example.com/llm-cost-ops
+    about: Read the comprehensive documentation

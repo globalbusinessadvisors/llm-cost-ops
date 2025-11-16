@@ -1,0 +1,370 @@
+name: Status Dashboard
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+  pull_request:
+    types: [opened, synchronize, closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+  issues: read
+  actions: read
+
+jobs:
+  collect-metrics:
+    name: Collect Metrics
+    runs-on: ubuntu-latest
+    outputs:
+      python-status: ${{ steps.python.outputs.status }}
+      typescript-status: ${{ steps.typescript.outputs.status }}
+      rust-status: ${{ steps.rust.outputs.status }}
+      go-status: ${{ steps.go.outputs.status }}
+      java-status: ${{ steps.java.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Python SDK status
+        id: python
+        run: |
+          STATUS="unknown"
+          if [ -d "sdks/python" ]; then
+            # Check latest workflow run
+            WORKFLOW_STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/python-sdk.yml/runs --jq '.workflow_runs[0].conclusion' || echo "unknown")
+            STATUS="$WORKFLOW_STATUS"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check TypeScript SDK status
+        id: typescript
+        run: |
+          STATUS="unknown"
+          if [ -d "sdks/typescript" ]; then
+            WORKFLOW_STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/typescript-sdk.yml/runs --jq '.workflow_runs[0].conclusion' || echo "unknown")
+            STATUS="$WORKFLOW_STATUS"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Rust SDK status
+        id: rust
+        run: |
+          STATUS="unknown"
+          if [ -d "sdks/rust" ]; then
+            WORKFLOW_STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/rust-sdk.yml/runs --jq '.workflow_runs[0].conclusion' || echo "unknown")
+            STATUS="$WORKFLOW_STATUS"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Go SDK status
+        id: go
+        run: |
+          STATUS="unknown"
+          if [ -d "sdks/go" ]; then
+            WORKFLOW_STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/go-sdk.yml/runs --jq '.workflow_runs[0].conclusion' || echo "unknown")
+            STATUS="$WORKFLOW_STATUS"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Java SDK status
+        id: java
+        run: |
+          STATUS="unknown"
+          if [ -d "sdks/java" ]; then
+            WORKFLOW_STATUS=$(gh api repos/${{ github.repository }}/actions/workflows/java-sdk.yml/runs --jq '.workflow_runs[0].conclusion' || echo "unknown")
+            STATUS="$WORKFLOW_STATUS"
+          fi
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  generate-badges:
+    name: Generate Status Badges
+    needs: collect-metrics
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Create badges directory
+        run: mkdir -p .github/badges
+
+      - name: Generate build badges
+        run: |
+          # Function to get badge color
+          get_color() {
+            case $1 in
+              success) echo "brightgreen" ;;
+              failure) echo "red" ;;
+              cancelled) echo "lightgrey" ;;
+              *) echo "yellow" ;;
+            esac
+          }
+
+          # Python badge
+          PYTHON_COLOR=$(get_color "${{ needs.collect-metrics.outputs.python-status }}")
+          curl -o .github/badges/python-build.svg "https://img.shields.io/badge/python-${{ needs.collect-metrics.outputs.python-status }}-${PYTHON_COLOR}"
+
+          # TypeScript badge
+          TS_COLOR=$(get_color "${{ needs.collect-metrics.outputs.typescript-status }}")
+          curl -o .github/badges/typescript-build.svg "https://img.shields.io/badge/typescript-${{ needs.collect-metrics.outputs.typescript-status }}-${TS_COLOR}"
+
+          # Rust badge
+          RUST_COLOR=$(get_color "${{ needs.collect-metrics.outputs.rust-status }}")
+          curl -o .github/badges/rust-build.svg "https://img.shields.io/badge/rust-${{ needs.collect-metrics.outputs.rust-status }}-${RUST_COLOR}"
+
+          # Go badge
+          GO_COLOR=$(get_color "${{ needs.collect-metrics.outputs.go-status }}")
+          curl -o .github/badges/go-build.svg "https://img.shields.io/badge/go-${{ needs.collect-metrics.outputs.go-status }}-${GO_COLOR}"
+
+          # Java badge
+          JAVA_COLOR=$(get_color "${{ needs.collect-metrics.outputs.java-status }}")
+          curl -o .github/badges/java-build.svg "https://img.shields.io/badge/java-${{ needs.collect-metrics.outputs.java-status }}-${JAVA_COLOR}"
+
+      - name: Generate version badges
+        run: |
+          # Python version
+          if [ -f "sdks/python/pyproject.toml" ]; then
+            VERSION=$(python -c "import toml; print(toml.load('sdks/python/pyproject.toml')['project']['version'])" 2>/dev/null || echo "unknown")
+            curl -o .github/badges/python-version.svg "https://img.shields.io/badge/version-${VERSION}-blue"
+          fi
+
+          # TypeScript version
+          if [ -f "sdks/typescript/package.json" ]; then
+            VERSION=$(node -p "require('./sdks/typescript/package.json').version" 2>/dev/null || echo "unknown")
+            curl -o .github/badges/typescript-version.svg "https://img.shields.io/badge/version-${VERSION}-blue"
+          fi
+
+          # Rust version
+          if [ -f "sdks/rust/Cargo.toml" ]; then
+            VERSION=$(cargo metadata --manifest-path sdks/rust/Cargo.toml --format-version 1 --no-deps 2>/dev/null | jq -r '.packages[0].version' || echo "unknown")
+            curl -o .github/badges/rust-version.svg "https://img.shields.io/badge/version-${VERSION}-blue"
+          fi
+
+      - name: Upload badges
+        uses: actions/upload-artifact@v4
+        with:
+          name: status-badges
+          path: .github/badges/
+          retention-days: 90
+
+  generate-compatibility-matrix:
+    name: Generate Compatibility Matrix
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate compatibility matrix
+        id: matrix
+        run: |
+          cat > compatibility-matrix.md << 'EOF'
+          # SDK Compatibility Matrix
+
+          This matrix shows the compatibility between different SDK versions and the LLM Cost Ops API.
+
+          | SDK | Latest Version | API Version | Node/Python/Rust Version | Status |
+          |-----|----------------|-------------|--------------------------|--------|
+          EOF
+
+          # Add Python row
+          if [ -d "sdks/python" ]; then
+            PYTHON_VERSION=$(python -c "import toml; print(toml.load('sdks/python/pyproject.toml')['project']['version'])" 2>/dev/null || echo "N/A")
+            echo "| Python | ${PYTHON_VERSION} | v1.0 | Python 3.9+ | ✅ Active |" >> compatibility-matrix.md
+          fi
+
+          # Add TypeScript row
+          if [ -d "sdks/typescript" ]; then
+            TS_VERSION=$(node -p "require('./sdks/typescript/package.json').version" 2>/dev/null || echo "N/A")
+            echo "| TypeScript | ${TS_VERSION} | v1.0 | Node 18+ | ✅ Active |" >> compatibility-matrix.md
+          fi
+
+          # Add Rust row
+          if [ -d "sdks/rust" ]; then
+            RUST_VERSION=$(cargo metadata --manifest-path sdks/rust/Cargo.toml --format-version 1 --no-deps 2>/dev/null | jq -r '.packages[0].version' || echo "N/A")
+            echo "| Rust | ${RUST_VERSION} | v1.0 | Rust 1.70+ | ✅ Active |" >> compatibility-matrix.md
+          fi
+
+          cat >> compatibility-matrix.md << 'EOF'
+
+          ## Feature Support
+
+          | Feature | Python | TypeScript | Rust | Go | Java |
+          |---------|--------|------------|------|-----|------|
+          | Cost Tracking | ✅ | ✅ | ✅ | ⚠️ Beta | 🚧 Planned |
+          | Multi-tenancy | ✅ | ✅ | ✅ | ⚠️ Beta | 🚧 Planned |
+          | SSO Integration | ✅ | ✅ | ✅ | ❌ | ❌ |
+          | Export/Reporting | ✅ | ✅ | ✅ | ❌ | ❌ |
+          | Async Support | ✅ | ✅ | ✅ | ✅ | ⚠️ Beta |
+
+          **Legend:**
+          - ✅ Fully Supported
+          - ⚠️ Beta / Partial Support
+          - 🚧 Planned
+          - ❌ Not Available
+          EOF
+
+      - name: Upload compatibility matrix
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-matrix
+          path: compatibility-matrix.md
+          retention-days: 90
+
+  update-readme:
+    name: Update README with Badges
+    needs: [collect-metrics, generate-badges, generate-compatibility-matrix]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download badges
+        uses: actions/download-artifact@v4
+        with:
+          name: status-badges
+          path: .github/badges
+
+      - name: Download compatibility matrix
+        uses: actions/download-artifact@v4
+        with:
+          name: compatibility-matrix
+          path: .
+
+      - name: Update README
+        run: |
+          # Check if README exists
+          if [ ! -f "README.md" ]; then
+            touch README.md
+          fi
+
+          # Create badges section
+          cat > badges.md << 'EOF'
+          ## SDK Status
+
+          ### Build Status
+          ![Python Build](https://github.com/${{ github.repository }}/blob/main/.github/badges/python-build.svg)
+          ![TypeScript Build](https://github.com/${{ github.repository }}/blob/main/.github/badges/typescript-build.svg)
+          ![Rust Build](https://github.com/${{ github.repository }}/blob/main/.github/badges/rust-build.svg)
+
+          ### Version
+          ![Python Version](https://github.com/${{ github.repository }}/blob/main/.github/badges/python-version.svg)
+          ![TypeScript Version](https://github.com/${{ github.repository }}/blob/main/.github/badges/typescript-version.svg)
+          ![Rust Version](https://github.com/${{ github.repository }}/blob/main/.github/badges/rust-version.svg)
+
+          EOF
+
+          # Insert or update badges section in README
+          if grep -q "## SDK Status" README.md; then
+            # Update existing section
+            sed -i '/## SDK Status/,/^##[^#]/{ /^##[^#]/!d; }' README.md
+            sed -i '/## SDK Status/r badges.md' README.md
+          else
+            # Add new section at the top
+            cat badges.md README.md > README.new.md
+            mv README.new.md README.md
+          fi
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add .github/badges/ compatibility-matrix.md README.md
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "chore: update status dashboard and badges"
+            git push
+          fi
+
+  health-check:
+    name: System Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check repository health
+        id: health
+        run: |
+          # Check for stale PRs
+          STALE_PRS=$(gh pr list --search "updated:<$(date -d '30 days ago' +%Y-%m-%d)" --json number --jq 'length')
+          echo "stale-prs=$STALE_PRS" >> $GITHUB_OUTPUT
+
+          # Check for open security issues
+          SECURITY_ISSUES=$(gh issue list --label "security" --state open --json number --jq 'length')
+          echo "security-issues=$SECURITY_ISSUES" >> $GITHUB_OUTPUT
+
+          # Check for failing workflows
+          FAILING_WORKFLOWS=$(gh api repos/${{ github.repository }}/actions/runs --jq '[.workflow_runs[] | select(.conclusion == "failure")] | length')
+          echo "failing-workflows=$FAILING_WORKFLOWS" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate health report
+        run: |
+          echo "# Repository Health Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Generated: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "- Stale PRs (>30 days): ${{ steps.health.outputs.stale-prs }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Open Security Issues: ${{ steps.health.outputs.security-issues }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Failing Workflows: ${{ steps.health.outputs.failing-workflows }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## SDK Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Python: ${{ needs.collect-metrics.outputs.python-status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- TypeScript: ${{ needs.collect-metrics.outputs.typescript-status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Rust: ${{ needs.collect-metrics.outputs.rust-status }}" >> $GITHUB_STEP_SUMMARY
+
+  summary:
+    name: Generate Dashboard Summary
+    needs: [collect-metrics, generate-badges, generate-compatibility-matrix, health-check]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate comprehensive summary
+        run: |
+          echo "# 📊 Status Dashboard Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Last Updated: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## SDK Build Status" >> $GITHUB_STEP_SUMMARY
+          echo "| SDK | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Python | ${{ needs.collect-metrics.outputs.python-status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TypeScript | ${{ needs.collect-metrics.outputs.typescript-status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust | ${{ needs.collect-metrics.outputs.rust-status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go | ${{ needs.collect-metrics.outputs.go-status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Java | ${{ needs.collect-metrics.outputs.java-status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Compatibility Matrix](compatibility-matrix.md)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Badges](.github/badges/)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Actions](../../actions)" >> $GITHUB_STEP_SUMMARY

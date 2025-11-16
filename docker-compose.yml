@@ -1,0 +1,663 @@
+# Docker Compose for LLM Cost Ops - Development Environment
+# Version: 1.0.0
+# Description: Complete development stack with all services, monitoring, and observability
+
+version: '3.8'
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  llm-cost-ops-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+    labels:
+      com.llm-cost-ops.description: "Main application network"
+      com.llm-cost-ops.environment: "development"
+
+  monitoring-network:
+    driver: bridge
+    labels:
+      com.llm-cost-ops.description: "Monitoring and observability network"
+      com.llm-cost-ops.environment: "development"
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  postgres-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "PostgreSQL database data"
+      com.llm-cost-ops.backup: "required"
+
+  redis-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Redis cache data"
+
+  nats-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "NATS message broker data"
+
+  prometheus-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Prometheus metrics data"
+      com.llm-cost-ops.backup: "required"
+
+  grafana-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Grafana dashboards and configuration"
+      com.llm-cost-ops.backup: "required"
+
+  jaeger-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Jaeger tracing data"
+
+  app-data:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Application data and logs"
+
+# ============================================================================
+# SERVICES
+# ============================================================================
+services:
+  # ==========================================================================
+  # APPLICATION SERVICE
+  # ==========================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        - RUST_VERSION=1.75
+        - BUILD_DATE=${BUILD_DATE:-2024-01-01}
+        - VCS_REF=${VCS_REF:-dev}
+    container_name: llm-cost-ops-app
+    hostname: llm-cost-ops-app
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"      # HTTP API
+      - "9090:9090"      # Metrics endpoint
+
+    networks:
+      - llm-cost-ops-network
+      - monitoring-network
+
+    volumes:
+      - ./src:/app/src:ro
+      - ./migrations:/app/migrations:ro
+      - ./migrations_postgres:/app/migrations_postgres:ro
+      - ./config.toml:/app/config.toml:ro
+      - app-data:/app/data
+      - ./logs:/app/logs
+
+    environment:
+      # Application Configuration
+      RUST_LOG: ${RUST_LOG:-debug}
+      RUST_BACKTRACE: ${RUST_BACKTRACE:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      PORT: ${PORT:-8080}
+      METRICS_PORT: ${METRICS_PORT:-9090}
+
+      # Database Configuration
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/llm_cost_ops_dev
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-20}
+      DATABASE_MIN_CONNECTIONS: ${DATABASE_MIN_CONNECTIONS:-5}
+      DATABASE_CONNECTION_TIMEOUT: ${DATABASE_CONNECTION_TIMEOUT:-30}
+      DATABASE_IDLE_TIMEOUT: ${DATABASE_IDLE_TIMEOUT:-600}
+
+      # Redis Configuration
+      REDIS_URL: redis://redis:6379/0
+      REDIS_POOL_SIZE: ${REDIS_POOL_SIZE:-10}
+      REDIS_TIMEOUT: ${REDIS_TIMEOUT:-5}
+
+      # NATS Configuration
+      NATS_URL: nats://nats:4222
+      NATS_CLUSTER_ID: llm-cost-ops-dev
+      NATS_CLIENT_ID: llm-cost-ops-app-1
+
+      # Observability Configuration
+      JAEGER_AGENT_HOST: jaeger
+      JAEGER_AGENT_PORT: 6831
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
+      OTEL_EXPORTER_JAEGER_ENDPOINT: http://jaeger:14268/api/traces
+
+      # Security Configuration
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      API_KEY_HEADER: ${API_KEY_HEADER:-X-API-Key}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
+
+      # Feature Flags
+      ENABLE_COMPRESSION: ${ENABLE_COMPRESSION:-true}
+      ENABLE_RATE_LIMITING: ${ENABLE_RATE_LIMITING:-true}
+      ENABLE_METRICS: ${ENABLE_METRICS:-true}
+      ENABLE_TRACING: ${ENABLE_TRACING:-true}
+
+      # Export Configuration
+      EXPORT_ENABLED: ${EXPORT_ENABLED:-true}
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-noreply@llm-cost-ops.local}
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      jaeger:
+        condition: service_started
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    labels:
+      com.llm-cost-ops.service: "application"
+      com.llm-cost-ops.environment: "development"
+      com.llm-cost-ops.version: "0.1.0"
+
+  # ==========================================================================
+  # POSTGRESQL DATABASE
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: llm-cost-ops-postgres
+    hostname: postgres
+    restart: unless-stopped
+
+    ports:
+      - "5432:5432"
+
+    networks:
+      - llm-cost-ops-network
+
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-llm_cost_ops_dev}
+      POSTGRES_INITDB_ARGS: ${POSTGRES_INITDB_ARGS:--encoding=UTF-8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8}
+      PGDATA: /var/lib/postgresql/data/pgdata
+
+      # Performance tuning for development
+      POSTGRES_SHARED_BUFFERS: ${POSTGRES_SHARED_BUFFERS:-256MB}
+      POSTGRES_EFFECTIVE_CACHE_SIZE: ${POSTGRES_EFFECTIVE_CACHE_SIZE:-1GB}
+      POSTGRES_MAINTENANCE_WORK_MEM: ${POSTGRES_MAINTENANCE_WORK_MEM:-128MB}
+      POSTGRES_WORK_MEM: ${POSTGRES_WORK_MEM:-8MB}
+      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-100}
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d llm_cost_ops_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    labels:
+      com.llm-cost-ops.service: "database"
+      com.llm-cost-ops.environment: "development"
+      com.llm-cost-ops.backup: "required"
+
+  # ==========================================================================
+  # REDIS CACHE
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: llm-cost-ops-redis
+    hostname: redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    networks:
+      - llm-cost-ops-network
+
+    volumes:
+      - redis-data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    command: redis-server /usr/local/etc/redis/redis.conf
+
+    environment:
+      REDIS_REPLICATION_MODE: master
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    labels:
+      com.llm-cost-ops.service: "cache"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # NATS MESSAGE BROKER
+  # ==========================================================================
+  nats:
+    image: nats:2.10-alpine
+    container_name: llm-cost-ops-nats
+    hostname: nats
+    restart: unless-stopped
+
+    ports:
+      - "4222:4222"      # Client connections
+      - "8222:8222"      # HTTP management
+      - "6222:6222"      # Cluster connections
+
+    networks:
+      - llm-cost-ops-network
+      - monitoring-network
+
+    volumes:
+      - nats-data:/data
+      - ./docker/nats/nats.conf:/etc/nats/nats.conf:ro
+
+    command: ["-c", "/etc/nats/nats.conf", "-D"]
+
+    environment:
+      NATS_SERVER_NAME: llm-cost-ops-nats-1
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    labels:
+      com.llm-cost-ops.service: "message-broker"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # PROMETHEUS MONITORING
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: llm-cost-ops-prometheus
+    hostname: prometheus
+    restart: unless-stopped
+
+    ports:
+      - "9091:9090"
+
+    networks:
+      - llm-cost-ops-network
+      - monitoring-network
+
+    volumes:
+      - prometheus-data:/prometheus
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+    environment:
+      TZ: ${TZ:-UTC}
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    labels:
+      com.llm-cost-ops.service: "monitoring"
+      com.llm-cost-ops.environment: "development"
+      com.llm-cost-ops.backup: "required"
+
+  # ==========================================================================
+  # GRAFANA DASHBOARDS
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: llm-cost-ops-grafana
+    hostname: grafana
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    networks:
+      - monitoring-network
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    environment:
+      # Server Configuration
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://localhost:3000}
+      GF_SERVER_DOMAIN: ${GF_SERVER_DOMAIN:-localhost}
+
+      # Security Configuration
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_SECRET_KEY: ${GF_SECURITY_SECRET_KEY:-dev-secret-key}
+      GF_SECURITY_DISABLE_GRAVATAR: ${GF_SECURITY_DISABLE_GRAVATAR:-true}
+
+      # Database Configuration
+      GF_DATABASE_TYPE: sqlite3
+      GF_DATABASE_PATH: /var/lib/grafana/grafana.db
+
+      # Auth Configuration
+      GF_AUTH_ANONYMOUS_ENABLED: ${GF_AUTH_ANONYMOUS_ENABLED:-false}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: ${GF_AUTH_ANONYMOUS_ORG_ROLE:-Viewer}
+
+      # Alerting Configuration
+      GF_ALERTING_ENABLED: ${GF_ALERTING_ENABLED:-true}
+      GF_UNIFIED_ALERTING_ENABLED: ${GF_UNIFIED_ALERTING_ENABLED:-true}
+
+      # Logging Configuration
+      GF_LOG_LEVEL: ${GF_LOG_LEVEL:-info}
+      GF_LOG_MODE: console
+
+      # Feature Toggles
+      GF_FEATURE_TOGGLES_ENABLE: ${GF_FEATURE_TOGGLES_ENABLE:-publicDashboards}
+
+      # Timezone
+      TZ: ${TZ:-UTC}
+
+    depends_on:
+      prometheus:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    labels:
+      com.llm-cost-ops.service: "visualization"
+      com.llm-cost-ops.environment: "development"
+      com.llm-cost-ops.backup: "required"
+
+  # ==========================================================================
+  # JAEGER TRACING
+  # ==========================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: llm-cost-ops-jaeger
+    hostname: jaeger
+    restart: unless-stopped
+
+    ports:
+      - "5775:5775/udp"   # Zipkin compact thrift (deprecated)
+      - "6831:6831/udp"   # Jaeger compact thrift
+      - "6832:6832/udp"   # Jaeger binary thrift
+      - "5778:5778"       # Serve configs
+      - "16686:16686"     # Jaeger UI
+      - "14250:14250"     # gRPC
+      - "14268:14268"     # HTTP collector
+      - "14269:14269"     # Admin port
+      - "9411:9411"       # Zipkin compatible endpoint
+
+    networks:
+      - llm-cost-ops-network
+      - monitoring-network
+
+    volumes:
+      - jaeger-data:/tmp
+
+    environment:
+      # Collector Configuration
+      COLLECTOR_ZIPKIN_HOST_PORT: :9411
+      COLLECTOR_OTLP_ENABLED: true
+
+      # Storage Configuration
+      SPAN_STORAGE_TYPE: badger
+      BADGER_EPHEMERAL: false
+      BADGER_DIRECTORY_VALUE: /tmp/jaeger/data
+      BADGER_DIRECTORY_KEY: /tmp/jaeger/key
+
+      # Query Configuration
+      QUERY_BASE_PATH: /
+
+      # Sampling Configuration
+      SAMPLING_STRATEGIES_FILE: /etc/jaeger/sampling_strategies.json
+
+      # Metrics Configuration
+      METRICS_BACKEND: prometheus
+      METRICS_HTTP_ROUTE: /metrics
+
+      # Log Level
+      LOG_LEVEL: ${JAEGER_LOG_LEVEL:-info}
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:14269/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    labels:
+      com.llm-cost-ops.service: "tracing"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # MAILHOG (EMAIL TESTING)
+  # ==========================================================================
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: llm-cost-ops-mailhog
+    hostname: mailhog
+    restart: unless-stopped
+
+    ports:
+      - "1025:1025"      # SMTP
+      - "8025:8025"      # Web UI
+
+    networks:
+      - llm-cost-ops-network
+
+    environment:
+      MH_STORAGE: maildir
+      MH_MAILDIR_PATH: /tmp/mailhog
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8025/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+
+    labels:
+      com.llm-cost-ops.service: "email-testing"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # POSTGRES ADMIN (PGADMIN)
+  # ==========================================================================
+  pgadmin:
+    image: dpage/pgadmin4:8.1
+    container_name: llm-cost-ops-pgadmin
+    hostname: pgadmin
+    restart: unless-stopped
+
+    ports:
+      - "5050:80"
+
+    networks:
+      - llm-cost-ops-network
+
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@llm-cost-ops.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/misc/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    labels:
+      com.llm-cost-ops.service: "database-admin"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # REDIS COMMANDER (REDIS GUI)
+  # ==========================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: llm-cost-ops-redis-commander
+    hostname: redis-commander
+    restart: unless-stopped
+
+    ports:
+      - "8081:8081"
+
+    networks:
+      - llm-cost-ops-network
+
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      HTTP_USER: ${REDIS_COMMANDER_USER:-admin}
+      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD:-admin}
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+
+    labels:
+      com.llm-cost-ops.service: "cache-admin"
+      com.llm-cost-ops.environment: "development"

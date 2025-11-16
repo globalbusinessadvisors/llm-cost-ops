@@ -164,7 +164,7 @@ impl SqliteUsageRepository {
             timestamp: DateTime::parse_from_rfc3339(&row.timestamp)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now()),
-            provider: Provider::from_str(&row.provider),
+            provider: Provider::parse(&row.provider),
             model: crate::domain::ModelIdentifier {
                 name: row.model_name,
                 version: row.model_version,
@@ -302,7 +302,7 @@ impl SqliteCostRepository {
             timestamp: DateTime::parse_from_rfc3339(&row.timestamp)
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now()),
-            provider: Provider::from_str(&row.provider),
+            provider: Provider::parse(&row.provider),
             model: row.model_name,
             input_cost: Decimal::from_str(&row.input_cost).unwrap_or(Decimal::ZERO),
             output_cost: Decimal::from_str(&row.output_cost).unwrap_or(Decimal::ZERO),
@@ -426,7 +426,7 @@ impl SqlitePricingRepository {
 
         PricingTable {
             id: Uuid::from_str(&row.id).unwrap_or_else(|_| Uuid::new_v4()),
-            provider: Provider::from_str(&row.provider),
+            provider: Provider::parse(&row.provider),
             model: row.model_name,
             effective_date: DateTime::parse_from_rfc3339(&row.effective_date)
                 .map(|dt| dt.with_timezone(&Utc))
@@ -559,7 +559,7 @@ impl UsageRepository for PostgresUsageRepository {
             UsageRecord {
                 id: r.id,
                 timestamp: r.timestamp,
-                provider: Provider::from_str(&r.provider),
+                provider: Provider::parse(&r.provider),
                 model: crate::domain::ModelIdentifier {
                     name: r.model_name,
                     version: r.model_version,
@@ -622,7 +622,7 @@ impl UsageRepository for PostgresUsageRepository {
                 UsageRecord {
                     id: r.id,
                     timestamp: r.timestamp,
-                    provider: Provider::from_str(&r.provider),
+                    provider: Provider::parse(&r.provider),
                     model: crate::domain::ModelIdentifier {
                         name: r.model_name,
                         version: r.model_version,
@@ -729,7 +729,7 @@ impl CostRepository for PostgresCostRepository {
                 id: r.id,
                 usage_id: r.usage_id,
                 timestamp: r.timestamp,
-                provider: Provider::from_str(&r.provider),
+                provider: Provider::parse(&r.provider),
                 model: r.model_name,
                 input_cost: r.input_cost,
                 output_cost: r.output_cost,
@@ -786,7 +786,7 @@ impl CostRepository for PostgresCostRepository {
                     id: r.id,
                     usage_id: r.usage_id,
                     timestamp: r.timestamp,
-                    provider: Provider::from_str(&r.provider),
+                    provider: Provider::parse(&r.provider),
                     model: r.model_name,
                     input_cost: r.input_cost,
                     output_cost: r.output_cost,
@@ -892,7 +892,7 @@ impl PricingRepository for PostgresPricingRepository {
         Ok(row.map(|r| {
             PricingTable {
                 id: r.id,
-                provider: Provider::from_str(&r.provider),
+                provider: Provider::parse(&r.provider),
                 model: r.model_name,
                 effective_date: r.effective_date,
                 end_date: r.end_date,
@@ -935,7 +935,7 @@ impl PricingRepository for PostgresPricingRepository {
             .map(|r| {
                 PricingTable {
                     id: r.id,
-                    provider: Provider::from_str(&r.provider),
+                    provider: Provider::parse(&r.provider),
                     model: r.model_name,
                     effective_date: r.effective_date,
                     end_date: r.end_date,

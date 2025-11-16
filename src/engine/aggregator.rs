@@ -110,7 +110,7 @@ impl Default for CostAggregator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{CostCalculation, Currency, PricingStructure};
+    use crate::domain::{CostCalculation, Currency, PricingStructure, Provider};
     use rust_decimal_macros::dec;
 
     fn create_test_record(provider: Provider, model: &str, cost: Decimal) -> CostRecord {

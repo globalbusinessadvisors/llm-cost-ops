@@ -129,11 +129,7 @@ impl SlidingWindow {
     /// Get remaining requests in current window
     fn remaining(&mut self, config: &RateLimitConfig) -> u64 {
         let current = self.current_count(config);
-        if current >= config.max_requests {
-            0
-        } else {
-            config.max_requests - current
-        }
+        config.max_requests.saturating_sub(current)
     }
 
     /// Get time until next available request slot
@@ -382,11 +378,7 @@ impl RedisRateLimiter {
         let current: u64 = con.zcount(&key, window_start, now).await
             .map_err(|e| CostOpsError::Integration(format!("Redis zcount failed: {}", e)))?;
 
-        let remaining = if current >= config.max_requests {
-            0
-        } else {
-            config.max_requests - current
-        };
+        let remaining = config.max_requests.saturating_sub(current);
 
         // Calculate retry_after if rate limited
         let retry_after = if current >= config.max_requests {
@@ -449,11 +441,7 @@ impl RateLimiter for RedisRateLimiter {
         // Check if we're within limits (including burst)
         let allowed = current < config.max_requests + config.burst_size;
         let final_current = if allowed { current + 1 } else { current };
-        let remaining = if final_current >= config.max_requests {
-            0
-        } else {
-            config.max_requests - final_current
-        };
+        let remaining = config.max_requests.saturating_sub(final_current);
 
         if allowed {
             // Add current request

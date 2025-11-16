@@ -1,0 +1,215 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llm-cost-ops.fullname" . }}
+  labels:
+    {{- include "llm-cost-ops.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "llm-cost-ops.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "llm-cost-ops.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "llm-cost-ops.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "llm-cost-ops.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "llm-cost-ops.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.api.port }}
+              protocol: TCP
+            {{- if .Values.config.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.config.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          env:
+            # Database configuration
+            - name: DATABASE_URL
+              value: {{ include "llm-cost-ops.databaseUrl" . | quote }}
+            {{- if and (eq .Values.config.database.type "postgres") .Values.config.database.existingSecret }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.database.existingSecret }}
+                  key: {{ .Values.config.database.existingSecretPasswordKey }}
+            {{- end }}
+            # Database pool configuration
+            - name: DB_POOL_SIZE
+              value: {{ .Values.config.database.poolSize | quote }}
+            # API configuration
+            - name: API_HOST
+              value: {{ .Values.config.api.host | quote }}
+            - name: API_PORT
+              value: {{ .Values.config.api.port | quote }}
+            # Logging configuration
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logging.level | quote }}
+            - name: LOG_FORMAT
+              value: {{ .Values.config.logging.format | quote }}
+            # Metrics configuration
+            {{- if .Values.config.metrics.enabled }}
+            - name: METRICS_ENABLED
+              value: "true"
+            - name: METRICS_PORT
+              value: {{ .Values.config.metrics.port | quote }}
+            {{- end }}
+            # Authentication configuration
+            {{- if .Values.config.auth.enabled }}
+            - name: AUTH_ENABLED
+              value: "true"
+            - name: JWT_SECRET
+              {{- if .Values.config.auth.jwt.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.auth.jwt.existingSecret }}
+                  key: {{ .Values.config.auth.jwt.existingSecretKey }}
+              {{- else }}
+              value: {{ .Values.config.auth.jwt.secret | quote }}
+              {{- end }}
+            - name: JWT_EXPIRATION_SECS
+              value: {{ .Values.config.auth.jwt.expirationSecs | quote }}
+            {{- end }}
+            # Rate limiting configuration
+            {{- if .Values.config.rateLimit.enabled }}
+            - name: RATE_LIMIT_ENABLED
+              value: "true"
+            - name: RATE_LIMIT_REQUESTS_PER_SEC
+              value: {{ .Values.config.rateLimit.requestsPerSec | quote }}
+            {{- end }}
+            # Tracing configuration
+            {{- if .Values.config.tracing.enabled }}
+            - name: TRACING_ENABLED
+              value: "true"
+            - name: TRACING_BACKEND
+              value: {{ .Values.config.tracing.backend | quote }}
+            {{- if eq .Values.config.tracing.backend "jaeger" }}
+            - name: JAEGER_ENDPOINT
+              value: {{ .Values.config.tracing.jaeger.endpoint | quote }}
+            {{- else if eq .Values.config.tracing.backend "otlp" }}
+            - name: OTLP_ENDPOINT
+              value: {{ .Values.config.tracing.otlp.endpoint | quote }}
+            {{- end }}
+            - name: TRACING_SAMPLING_RATE
+              value: {{ .Values.config.tracing.samplingRate | quote }}
+            {{- end }}
+            # Streaming configuration
+            {{- if .Values.config.streaming.enabled }}
+            - name: STREAMING_ENABLED
+              value: "true"
+            - name: STREAMING_BACKEND
+              value: {{ .Values.config.streaming.backend | quote }}
+            {{- if eq .Values.config.streaming.backend "nats" }}
+            - name: NATS_URL
+              value: {{ .Values.config.streaming.nats.url | quote }}
+            {{- else if eq .Values.config.streaming.backend "redis" }}
+            - name: REDIS_URL
+              value: {{ .Values.config.streaming.redis.url | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.httpGet.path }}
+              port: {{ .Values.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.httpGet.path }}
+              port: {{ .Values.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.startupProbe.httpGet.path }}
+              port: {{ .Values.startupProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.startupProbe.successThreshold }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: /data
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "llm-cost-ops.fullname" .) }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}

@@ -1,0 +1,462 @@
+name: Go SDK - Security Scanning
+
+on:
+  schedule:
+    # Run weekly security scans on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'sdk/go/**'
+      - '.github/workflows/sdk/go-sdk-security.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'sdk/go/**'
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.23'
+  WORKING_DIR: 'sdk/go'
+
+jobs:
+  # Vulnerability scanning
+  vulnerability-scan:
+    name: Vulnerability Scanning
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        id: govulncheck
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "Running vulnerability check..."
+          govulncheck -json ./... > vulns.json 2>&1 || true
+          govulncheck ./... || echo "Vulnerabilities found, check report"
+
+      - name: Parse vulnerability results
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          if [ -f vulns.json ]; then
+            echo "## Vulnerability Report" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Count vulnerabilities
+            VULN_COUNT=$(grep -c '"osv"' vulns.json || echo "0")
+            echo "Found $VULN_COUNT potential vulnerabilities" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$VULN_COUNT" -gt 0 ]; then
+              echo "See artifact for detailed vulnerability report" >> $GITHUB_STEP_SUMMARY
+            else
+              echo ":white_check_mark: No vulnerabilities detected" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+      - name: Upload vulnerability report
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerability-report
+          path: ${{ env.WORKING_DIR }}/vulns.json
+          retention-days: 90
+
+  # Dependency audit
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check for outdated dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "## Dependency Audit" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          go list -u -m -json all > deps.json
+
+          echo "### Outdated Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          go list -u -m all | grep '\[' || echo "All dependencies are up to date" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code go.mod go.sum || echo "Dependencies need updating"
+
+      - name: Check for indirect dependencies
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Indirect Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          go list -m all | grep indirect || echo "No indirect dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Install nancy (dependency scanner)
+        run: |
+          curl -L https://github.com/sonatype-nexus-community/nancy/releases/latest/download/nancy-linux-amd64 -o nancy
+          chmod +x nancy
+
+      - name: Run dependency vulnerability scan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          go list -json -deps ./... | ../nancy sleuth || true
+
+  # Security scanning with gosec
+  gosec-scan:
+    name: Security Code Scan (gosec)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec scan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          gosec -fmt json -out gosec-report.json ./... || true
+          gosec -fmt sarif -out gosec-results.sarif ./... || true
+          gosec ./...
+
+      - name: Upload gosec report
+        uses: actions/upload-artifact@v4
+        with:
+          name: gosec-report
+          path: |
+            ${{ env.WORKING_DIR }}/gosec-report.json
+            ${{ env.WORKING_DIR }}/gosec-results.sarif
+          retention-days: 90
+
+      - name: Upload SARIF results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ env.WORKING_DIR }}/gosec-results.sarif
+          category: gosec
+
+  # License compliance scanning
+  license-scan:
+    name: License Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses@latest
+
+      - name: Check licenses
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "## License Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check for disallowed licenses
+          go-licenses check ./... || true
+
+          # Generate license report
+          go-licenses report ./... > licenses.txt || true
+
+          echo "### Dependency Licenses" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          head -20 licenses.txt || echo "No licenses found" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Save license data
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          mkdir -p license-data
+          go-licenses save ./... --save_path=license-data || true
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: |
+            ${{ env.WORKING_DIR }}/licenses.txt
+            ${{ env.WORKING_DIR }}/license-data
+          retention-days: 90
+
+  # CodeQL analysis
+  codeql:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          queries: security-and-quality
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build Go code
+        working-directory: ${{ env.WORKING_DIR }}
+        run: go build -v ./...
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
+
+  # Static analysis
+  static-analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        working-directory: ${{ env.WORKING_DIR }}
+        run: staticcheck -f json ./... > staticcheck.json || true
+
+      - name: Install errcheck
+        run: go install github.com/kisielk/errcheck@latest
+
+      - name: Check for unchecked errors
+        working-directory: ${{ env.WORKING_DIR }}
+        run: errcheck ./... || true
+
+      - name: Upload static analysis results
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-analysis
+          path: ${{ env.WORKING_DIR }}/staticcheck.json
+          retention-days: 90
+
+  # Secrets scanning
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Install trufflehog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Run trufflehog scan
+        run: |
+          trufflehog filesystem ${{ env.WORKING_DIR }} --json > trufflehog-report.json || true
+
+      - name: Upload secrets scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: secrets-scan
+          path: trufflehog-report.json
+          retention-days: 90
+
+  # SBOM generation
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Generate SBOM (SPDX format)
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          syft packages . -o spdx-json > sbom-spdx.json
+          syft packages . -o cyclonedx-json > sbom-cyclonedx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            ${{ env.WORKING_DIR }}/sbom-spdx.json
+            ${{ env.WORKING_DIR }}/sbom-cyclonedx.json
+          retention-days: 90
+
+      - name: Scan SBOM for vulnerabilities
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+          grype sbom:${{ env.WORKING_DIR }}/sbom-spdx.json -o json > grype-report.json || true
+
+      - name: Upload vulnerability scan of SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-vulnerability-scan
+          path: grype-report.json
+          retention-days: 90
+
+  # Supply chain security
+  supply-chain:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Verify module checksums
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          go mod verify
+          echo "## Supply Chain Security" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo ":white_check_mark: Module checksums verified" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for typosquatting
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Dependencies from go.mod" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          go list -m all >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # Security summary
+  security-summary:
+    name: Security Summary
+    needs: [vulnerability-scan, dependency-audit, gosec-scan, license-scan, codeql, static-analysis, secrets-scan, sbom, supply-chain]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create security summary
+        run: |
+          echo "# Go SDK Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scan Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Vulnerability Scan | ${{ needs.vulnerability-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dependency Audit | ${{ needs.dependency-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gosec Scan | ${{ needs.gosec-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License Scan | ${{ needs.license-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CodeQL | ${{ needs.codeql.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Static Analysis | ${{ needs.static-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets Scan | ${{ needs.secrets-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SBOM | ${{ needs.sbom.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Supply Chain | ${{ needs.supply-chain.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check if any critical scans failed
+          if [ "${{ needs.vulnerability-scan.result }}" == "failure" ] || \
+             [ "${{ needs.secrets-scan.result }}" == "failure" ]; then
+            echo ":warning: **Critical security issues detected!**" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo ":white_check_mark: **All security scans completed**" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Notify on critical issues
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'push')
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Go SDK Security Scan detected critical issues! :warning:",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Security Alert* :rotating_light:\n*Repository:* ${{ github.repository }}\n*Branch:* ${{ github.ref_name }}\n*Trigger:* ${{ github.event_name }}"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Results"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

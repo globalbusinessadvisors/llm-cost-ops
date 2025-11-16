@@ -1,0 +1,21 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "llm-cost-ops.postgresql.fullname" . }}
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: database
+spec:
+  type: {{ .Values.postgresql.service.type }}
+  ports:
+    - name: postgresql
+      port: {{ .Values.postgresql.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  clusterIP: None
+{{- end }}

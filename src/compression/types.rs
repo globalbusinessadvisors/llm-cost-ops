@@ -79,12 +79,14 @@ impl FromStr for CompressionAlgorithm {
 
 /// Compression level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum CompressionLevel {
     /// Fastest compression (level 1)
     Fastest,
     /// Fast compression (level 3)
     Fast,
     /// Balanced compression (level 6)
+    #[default]
     Default,
     /// Best compression (level 9)
     Best,
@@ -116,11 +118,6 @@ impl CompressionLevel {
     }
 }
 
-impl Default for CompressionLevel {
-    fn default() -> Self {
-        Self::Default
-    }
-}
 
 /// Content encoding with quality factor
 #[derive(Debug, Clone, PartialEq)]

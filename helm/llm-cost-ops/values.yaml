@@ -1,0 +1,751 @@
+# Default values for llm-cost-ops.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global configuration
+global:
+  # Image registry for all images
+  imageRegistry: ""
+  # Image pull secrets for all images
+  imagePullSecrets: []
+  # Storage class for all PVCs
+  storageClass: ""
+
+# Number of replicas for the deployment
+replicaCount: 1
+
+# Image configuration
+image:
+  # Image registry
+  registry: docker.io
+  # Image repository
+  repository: llm-cost-ops/llm-cost-ops
+  # Image pull policy
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Override the name of the chart
+nameOverride: ""
+# Override the full name of the chart
+fullnameOverride: ""
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+  # Automatically mount ServiceAccount's API credentials
+  automountServiceAccountToken: true
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Service configuration
+service:
+  # Service type
+  type: ClusterIP
+  # Service port
+  port: 8080
+  # Target port on the pod
+  targetPort: 8080
+  # Service annotations
+  annotations: {}
+  # Session affinity
+  sessionAffinity: None
+  # Session affinity config
+  sessionAffinityConfig: {}
+
+# Ingress configuration
+ingress:
+  # Enable ingress
+  enabled: false
+  # Ingress class name
+  className: "nginx"
+  # Ingress annotations
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # nginx.ingress.kubernetes.io/rate-limit: "100"
+  # Ingress hosts
+  hosts:
+    - host: llm-cost-ops.local
+      paths:
+        - path: /
+          pathType: Prefix
+  # Ingress TLS configuration
+  tls: []
+  #  - secretName: llm-cost-ops-tls
+  #    hosts:
+  #      - llm-cost-ops.local
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Liveness probe configuration
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Readiness probe configuration
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+# Startup probe configuration
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 30
+
+# Horizontal Pod Autoscaler configuration
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+  # Custom metrics
+  customMetrics: []
+  # Behavior configuration
+  behavior: {}
+    # scaleDown:
+    #   stabilizationWindowSeconds: 300
+    #   policies:
+    #   - type: Percent
+    #     value: 50
+    #     periodSeconds: 60
+    # scaleUp:
+    #   stabilizationWindowSeconds: 0
+    #   policies:
+    #   - type: Percent
+    #     value: 100
+    #     periodSeconds: 15
+
+# Pod Disruption Budget configuration
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Node selector for pod assignment
+nodeSelector: {}
+
+# Tolerations for pod assignment
+tolerations: []
+
+# Affinity for pod assignment
+affinity: {}
+
+# Priority class name
+priorityClassName: ""
+
+# Topology spread constraints
+topologySpreadConstraints: []
+
+# Application configuration
+config:
+  # Application mode (api, worker, ingestion, scheduler, all)
+  mode: "all"
+
+  # API server configuration
+  api:
+    # Bind address
+    host: "0.0.0.0"
+    # Server port
+    port: 8080
+    # Request timeout in seconds
+    requestTimeoutSecs: 30
+    # Enable CORS
+    enableCors: true
+    # Enable request logging
+    enableLogging: true
+    # Max request body size in bytes
+    maxRequestBodySize: 10485760  # 10MB
+    # Enable compression
+    enableCompression: true
+    # Compression level (1-9)
+    compressionLevel: 6
+
+  # Database configuration
+  database:
+    # Database type (sqlite, postgres)
+    type: "postgres"
+    # Database host (for postgres)
+    host: "llm-cost-ops-postgres"
+    # Database port (for postgres)
+    port: 5432
+    # Database name
+    name: "llm_cost_ops"
+    # Database user
+    user: "postgres"
+    # Database password (prefer using existingSecret)
+    password: "postgres"
+    # Existing secret for database credentials
+    existingSecret: ""
+    # Secret key for password in existing secret
+    existingSecretPasswordKey: "password"
+    # Connection pool size
+    poolSize: 10
+    # Max connection lifetime in seconds
+    maxLifetime: 1800
+    # Connection timeout in seconds
+    connectionTimeout: 30
+    # Enable SSL mode (disable, allow, prefer, require)
+    sslMode: "prefer"
+    # SQLite file path (when type is sqlite)
+    sqlitePath: "/data/cost-ops.db"
+
+  # Logging configuration
+  logging:
+    # Log level (trace, debug, info, warn, error)
+    level: "info"
+    # Output format (text, json)
+    format: "json"
+    # Enable color output
+    color: false
+    # Enable file logging
+    enableFile: false
+    # Log file path
+    filePath: "/var/log/llm-cost-ops/app.log"
+    # Log file rotation
+    fileRotation:
+      enabled: true
+      maxSize: "100MB"
+      maxAge: 7
+      maxBackups: 10
+
+  # Metrics configuration
+  metrics:
+    # Enable Prometheus metrics
+    enabled: true
+    # Metrics endpoint path
+    path: "/metrics"
+    # Metrics port
+    port: 9090
+    # Enable process metrics
+    enableProcess: true
+    # Enable runtime metrics
+    enableRuntime: true
+    # Custom labels
+    labels: {}
+
+  # Tracing configuration
+  tracing:
+    # Enable distributed tracing
+    enabled: false
+    # Tracing backend (jaeger, zipkin, otlp)
+    backend: "jaeger"
+    # Jaeger configuration
+    jaeger:
+      endpoint: "http://jaeger-collector:14268/api/traces"
+      agentHost: "jaeger-agent"
+      agentPort: 6831
+    # OTLP configuration
+    otlp:
+      endpoint: "http://otel-collector:4317"
+      protocol: "grpc"
+    # Sampling rate (0.0 to 1.0)
+    samplingRate: 0.1
+
+  # Authentication configuration
+  auth:
+    # Enable authentication
+    enabled: true
+    # JWT configuration
+    jwt:
+      # JWT secret (prefer using existingSecret)
+      secret: "change-me-in-production"
+      # Existing secret for JWT
+      existingSecret: ""
+      # Secret key in existing secret
+      existingSecretKey: "jwt-secret"
+      # Token expiration in seconds
+      expirationSecs: 86400  # 24 hours
+      # Refresh token expiration in seconds
+      refreshExpirationSecs: 2592000  # 30 days
+      # Issuer
+      issuer: "llm-cost-ops"
+      # Audience
+      audience: "llm-cost-ops-api"
+    # API key configuration
+    apiKey:
+      # Enable API key authentication
+      enabled: true
+      # API key header name
+      headerName: "X-API-Key"
+    # RBAC configuration
+    rbac:
+      # Enable RBAC
+      enabled: true
+      # Default role for new users
+      defaultRole: "viewer"
+
+  # Rate limiting configuration
+  rateLimit:
+    # Enable rate limiting
+    enabled: true
+    # Requests per second per IP
+    requestsPerSec: 100
+    # Burst size
+    burstSize: 200
+    # Storage backend (memory, redis)
+    storage: "memory"
+    # Redis configuration (when storage is redis)
+    redis:
+      url: "redis://llm-cost-ops-redis:6379"
+      keyPrefix: "ratelimit:"
+      ttl: 60
+
+  # Ingestion configuration
+  ingestion:
+    # Enable ingestion endpoint
+    enabled: true
+    # Batch size for batch processing
+    batchSize: 1000
+    # Flush interval in seconds
+    flushInterval: 60
+    # Enable validation
+    enableValidation: true
+    # Max payload size in bytes
+    maxPayloadSize: 10485760  # 10MB
+
+  # Event streaming configuration
+  streaming:
+    # Enable event streaming
+    enabled: false
+    # Backend (nats, redis)
+    backend: "nats"
+    # NATS configuration
+    nats:
+      url: "nats://llm-cost-ops-nats:4222"
+      cluster: "llm-cost-ops"
+      clientId: "llm-cost-ops"
+      # Streaming configuration
+      subject: "llm.costs"
+      durableName: "cost-consumer"
+      # Max inflight messages
+      maxInflight: 1000
+    # Redis Streams configuration
+    redis:
+      url: "redis://llm-cost-ops-redis:6379"
+      stream: "llm:costs"
+      consumerGroup: "cost-processors"
+      consumerId: "cost-processor-1"
+
+  # Dead Letter Queue configuration
+  dlq:
+    # Enable DLQ
+    enabled: true
+    # Max retry attempts
+    maxRetries: 3
+    # Retry delay in seconds
+    retryDelay: 60
+    # Storage backend (database, file)
+    storage: "database"
+    # File storage path (when storage is file)
+    filePath: "/data/dlq"
+
+  # Export and reporting configuration
+  export:
+    # Enable export functionality
+    enabled: true
+    # Supported formats
+    formats:
+      - csv
+      - excel
+      - json
+    # Export directory
+    directory: "/data/exports"
+    # Max export size in MB
+    maxSizeMB: 100
+    # Enable scheduled reports
+    scheduling:
+      enabled: false
+      # Timezone for scheduling
+      timezone: "UTC"
+    # Email delivery configuration
+    email:
+      enabled: false
+      smtp:
+        host: "smtp.example.com"
+        port: 587
+        user: "noreply@example.com"
+        password: ""
+        existingSecret: ""
+        existingSecretPasswordKey: "smtp-password"
+        from: "noreply@example.com"
+        useTLS: true
+
+  # Forecasting configuration
+  forecasting:
+    # Enable forecasting
+    enabled: true
+    # Forecast window in days
+    windowDays: 30
+    # Enable anomaly detection
+    anomalyDetection: true
+    # Anomaly threshold (standard deviations)
+    anomalyThreshold: 3.0
+
+  # Budget alerts configuration
+  budgetAlerts:
+    # Enable budget alerts
+    enabled: false
+    # Check interval in seconds
+    checkInterval: 3600  # 1 hour
+    # Alert thresholds (percentage of budget)
+    thresholds:
+      - 50
+      - 75
+      - 90
+      - 100
+
+  # Compression configuration
+  compression:
+    # Enable compression
+    enabled: true
+    # Algorithm (gzip, brotli, zstd)
+    algorithm: "gzip"
+    # Compression level (1-9)
+    level: 6
+    # Min size to compress in bytes
+    minSize: 1024
+
+# Environment variables
+env:
+  # Environment name
+  - name: ENVIRONMENT
+    value: "production"
+  # Rust log level
+  - name: RUST_LOG
+    value: "info"
+  # Rust backtrace
+  - name: RUST_BACKTRACE
+    value: "0"
+
+# Additional environment variables from secrets
+envFrom: []
+  # - secretRef:
+  #     name: llm-cost-ops-secrets
+  # - configMapRef:
+  #     name: llm-cost-ops-config
+
+# Extra volumes
+extraVolumes:
+  - name: data
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
+
+# Extra volume mounts
+extraVolumeMounts:
+  - name: data
+    mountPath: /data
+  - name: tmp
+    mountPath: /tmp
+
+# ConfigMap configuration
+configMap:
+  # Create ConfigMap
+  create: true
+  # ConfigMap data
+  data: {}
+
+# Secret configuration
+secret:
+  # Create Secret
+  create: true
+  # Secret data (base64 encoded values will be decoded)
+  data: {}
+
+# Persistence configuration
+persistence:
+  # Enable persistence
+  enabled: false
+  # Storage class
+  storageClass: ""
+  # Access modes
+  accessModes:
+    - ReadWriteOnce
+  # Size
+  size: 10Gi
+  # Annotations
+  annotations: {}
+  # Selector
+  selector: {}
+  # Existing PVC
+  existingClaim: ""
+
+# PostgreSQL configuration
+postgresql:
+  # Enable PostgreSQL deployment
+  enabled: true
+  # PostgreSQL image
+  image:
+    registry: docker.io
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  # Authentication
+  auth:
+    # Admin user
+    username: postgres
+    # Admin password
+    password: postgres
+    # Database name
+    database: llm_cost_ops
+    # Existing secret
+    existingSecret: ""
+  # Primary configuration
+  primary:
+    # Persistence
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 10Gi
+      accessModes:
+        - ReadWriteOnce
+    # Resources
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+    # Pod security context
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+      fsGroup: 999
+    # Container security context
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      runAsNonRoot: true
+      runAsUser: 999
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 5432
+
+# Redis configuration
+redis:
+  # Enable Redis deployment
+  enabled: false
+  # Redis image
+  image:
+    registry: docker.io
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  # Authentication
+  auth:
+    enabled: false
+    password: ""
+    existingSecret: ""
+  # Resources
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  # Persistence
+  persistence:
+    enabled: false
+    storageClass: ""
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+# NATS configuration
+nats:
+  # Enable NATS deployment
+  enabled: false
+  # NATS image
+  image:
+    registry: docker.io
+    repository: nats
+    tag: "2.10-alpine"
+    pullPolicy: IfNotPresent
+  # Resources
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  # JetStream configuration
+  jetstream:
+    enabled: true
+    storage:
+      size: 5Gi
+      storageClass: ""
+
+# ServiceMonitor for Prometheus Operator
+serviceMonitor:
+  # Enable ServiceMonitor
+  enabled: false
+  # Additional labels
+  labels: {}
+  # Scrape interval
+  interval: 30s
+  # Scrape timeout
+  scrapeTimeout: 10s
+  # Relabel configs
+  relabelings: []
+  # Metric relabelings
+  metricRelabelings: []
+
+# Network Policy configuration
+networkPolicy:
+  # Enable network policy
+  enabled: false
+  # Pod selector
+  podSelector: {}
+  # Ingress rules
+  ingress:
+    - from:
+      - namespaceSelector: {}
+      ports:
+      - protocol: TCP
+        port: 8080
+  # Egress rules
+  egress:
+    - to:
+      - namespaceSelector: {}
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: postgresql
+      ports:
+      - protocol: TCP
+        port: 5432
+    # Allow DNS
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: kube-system
+      ports:
+      - protocol: UDP
+        port: 53
+
+# RBAC configuration
+rbac:
+  # Create RBAC resources
+  create: true
+  # Rules for the service account
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "services", "endpoints"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["configmaps"]
+      verbs: ["get", "list", "watch"]
+
+# Init containers
+initContainers: []
+  # - name: wait-for-db
+  #   image: busybox:latest
+  #   command: ['sh', '-c', 'until nc -z llm-cost-ops-postgres 5432; do echo waiting for postgres; sleep 2; done']
+
+# Sidecar containers
+sidecars: []
+  # - name: log-forwarder
+  #   image: fluent/fluent-bit:latest
+  #   volumeMounts:
+  #   - name: logs
+  #     mountPath: /var/log
+
+# Jobs configuration
+jobs:
+  # Database migration job
+  migration:
+    enabled: true
+    # Job annotations
+    annotations: {}
+    # Backoff limit
+    backoffLimit: 3
+    # TTL seconds after finished
+    ttlSecondsAfterFinished: 300
+    # Resources
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+# Tests configuration
+tests:
+  # Enable tests
+  enabled: true
+  # Test image
+  image:
+    registry: docker.io
+    repository: curlimages/curl
+    tag: "latest"
+    pullPolicy: IfNotPresent

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-cost-ops
+  labels:
+    name: llm-cost-ops
+    environment: production
+    app.kubernetes.io/name: llm-cost-ops
+    app.kubernetes.io/component: platform
+    app.kubernetes.io/part-of: llm-operations
+  annotations:
+    description: "LLM Cost Operations Platform - Cost tracking and optimization for LLM deployments"

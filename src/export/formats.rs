@@ -241,7 +241,7 @@ impl Exporter for ExcelExporter {
                                 })?;
                         } else {
                             worksheet
-                                .write_string(excel_row, excel_col, &n.to_string())
+                                .write_string(excel_row, excel_col, n.to_string())
                                 .map_err(|e| {
                                     ExportError::FormatError(format!("Excel write error: {}", e))
                                 })?;
@@ -263,7 +263,7 @@ impl Exporter for ExcelExporter {
                     }
                     _ => {
                         worksheet
-                            .write_string(excel_row, excel_col, &value.to_string())
+                            .write_string(excel_row, excel_col, value.to_string())
                             .map_err(|e| {
                                 ExportError::FormatError(format!("Excel write error: {}", e))
                             })?;

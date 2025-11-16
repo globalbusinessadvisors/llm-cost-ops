@@ -1,0 +1,326 @@
+# LLM-CostOps Python SDK
+
+[![PyPI version](https://badge.fury.io/py/llm-cost-ops.svg)](https://badge.fury.io/py/llm-cost-ops)
+[![Python versions](https://img.shields.io/pypi/pyversions/llm-cost-ops.svg)](https://pypi.org/project/llm-cost-ops/)
+[![License](https://img.shields.io/badge/License-Apache%202.0%20%2F%20MIT-blue.svg)](LICENSE)
+
+Enterprise-grade Python SDK for the LLM Cost Operations Platform. Track, analyze, and optimize costs across multiple LLM providers with production-ready accuracy.
+
+## Features
+
+- **Enterprise-Grade**: Full type hints, comprehensive error handling, structured logging
+- **Production-Ready**: Automatic retry logic, connection pooling, rate limiting
+- **Async Support**: Full async/await support with httpx
+- **Observable**: Built-in metrics, tracing, and logging
+- **Multi-Provider**: OpenAI, Anthropic, Google Vertex AI, Azure OpenAI, AWS Bedrock, and more
+- **Type-Safe**: Complete type annotations with mypy validation
+- **Well-Tested**: Comprehensive test coverage with pytest
+
+## Installation
+
+```bash
+# Basic installation
+pip install llm-cost-ops
+
+# With development tools
+pip install llm-cost-ops[dev]
+
+# With metrics support
+pip install llm-cost-ops[metrics]
+
+# All features
+pip install llm-cost-ops[all]
+```
+
+## Quick Start
+
+### Synchronous Usage
+
+```python
+from llm_cost_ops import CostOpsClient
+
+# Initialize client
+client = CostOpsClient(
+    api_key="your-api-key",
+    base_url="https://api.llm-cost-ops.dev"
+)
+
+# Submit usage data
+usage = client.usage.submit(
+    organization_id="org-123",
+    provider="openai",
+    model_id="gpt-4",
+    input_tokens=1000,
+    output_tokens=500,
+    total_tokens=1500
+)
+print(f"Usage tracked: {usage.usage_id}")
+print(f"Estimated cost: ${usage.estimated_cost}")
+
+# Get cost summary
+costs = client.costs.get(
+    organization_id="org-123",
+    start_date="2025-01-01",
+    end_date="2025-01-31"
+)
+print(f"Total cost: ${costs.total_cost}")
+print(f"Total requests: {costs.total_requests}")
+
+# Get analytics
+analytics = client.analytics.get(
+    organization_id="org-123",
+    start_date="2025-01-01",
+    end_date="2025-01-31",
+    interval="day"
+)
+for point in analytics.time_series:
+    print(f"{point.timestamp}: ${point.metrics['total_cost']}")
+```
+
+### Asynchronous Usage
+
+```python
+from llm_cost_ops import AsyncCostOpsClient
+import asyncio
+
+async def main():
+    async with AsyncCostOpsClient(api_key="your-api-key") as client:
+        # Submit usage data
+        usage = await client.usage.submit(
+            organization_id="org-123",
+            provider="openai",
+            model_id="gpt-4",
+            input_tokens=1000,
+            output_tokens=500,
+            total_tokens=1500
+        )
+
+        # Get costs
+        costs = await client.costs.get(
+            organization_id="org-123",
+            start_date="2025-01-01",
+            end_date="2025-01-31"
+        )
+        print(f"Total cost: ${costs.total_cost}")
+
+asyncio.run(main())
+```
+
+## Advanced Features
+
+### Custom Configuration
+
+```python
+from llm_cost_ops import CostOpsClient, ClientConfig
+
+config = ClientConfig(
+    api_key="your-api-key",
+    base_url="https://api.llm-cost-ops.dev",
+    timeout=30.0,
+    max_retries=3,
+    retry_backoff_factor=2.0,
+    max_connections=100,
+    max_keepalive_connections=20,
+    enable_logging=True,
+    log_level="INFO"
+)
+
+client = CostOpsClient(config=config)
+```
+
+### Rate Limiting
+
+```python
+from llm_cost_ops import CostOpsClient, RateLimitConfig
+
+client = CostOpsClient(
+    api_key="your-api-key",
+    rate_limit=RateLimitConfig(
+        max_requests=100,
+        time_window=60.0  # 100 requests per minute
+    )
+)
+```
+
+### Error Handling
+
+```python
+from llm_cost_ops import (
+    CostOpsClient,
+    CostOpsError,
+    APIError,
+    AuthenticationError,
+    RateLimitError,
+    ValidationError,
+    NetworkError
+)
+
+client = CostOpsClient(api_key="your-api-key")
+
+try:
+    usage = client.usage.submit(
+        organization_id="org-123",
+        provider="openai",
+        model_id="gpt-4",
+        input_tokens=1000,
+        output_tokens=500,
+        total_tokens=1500
+    )
+except AuthenticationError as e:
+    print(f"Authentication failed: {e}")
+except ValidationError as e:
+    print(f"Invalid data: {e}")
+except RateLimitError as e:
+    print(f"Rate limit exceeded: {e}")
+    print(f"Retry after: {e.retry_after} seconds")
+except APIError as e:
+    print(f"API error: {e.status_code} - {e.message}")
+except NetworkError as e:
+    print(f"Network error: {e}")
+except CostOpsError as e:
+    print(f"General error: {e}")
+```
+
+### Metrics and Observability
+
+```python
+from llm_cost_ops import CostOpsClient
+from prometheus_client import start_http_server
+
+# Enable Prometheus metrics
+client = CostOpsClient(
+    api_key="your-api-key",
+    enable_metrics=True
+)
+
+# Start metrics server
+start_http_server(8000)
+
+# Metrics will be available at http://localhost:8000/metrics
+```
+
+## API Reference
+
+### Client
+
+- `CostOpsClient`: Synchronous client
+- `AsyncCostOpsClient`: Asynchronous client
+
+### Resources
+
+- `client.usage`: Usage tracking operations
+- `client.costs`: Cost query operations
+- `client.pricing`: Pricing management operations
+- `client.analytics`: Analytics and insights operations
+
+### Methods
+
+#### Usage
+
+- `submit(**kwargs)`: Submit usage data
+- `get_history(**kwargs)`: Get usage history
+
+#### Costs
+
+- `get(**kwargs)`: Get cost summary
+
+#### Pricing
+
+- `list(**kwargs)`: List pricing entries
+- `create(**kwargs)`: Create pricing entry
+- `get(pricing_id)`: Get pricing by ID
+
+#### Analytics
+
+- `get(**kwargs)`: Get analytics data
+
+## Development
+
+### Setup
+
+```bash
+# Clone repository
+git clone https://github.com/llm-devops/llm-cost-ops.git
+cd llm-cost-ops/python-sdk
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in development mode
+pip install -e ".[dev]"
+```
+
+### Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=llm_cost_ops --cov-report=html
+
+# Run specific test file
+pytest tests/test_client.py
+
+# Run with verbose output
+pytest -v
+```
+
+### Type Checking
+
+```bash
+# Run mypy
+mypy llm_cost_ops
+
+# Check specific file
+mypy llm_cost_ops/client.py
+```
+
+### Linting
+
+```bash
+# Run pylint
+pylint llm_cost_ops
+
+# Run ruff
+ruff check llm_cost_ops
+
+# Auto-fix with ruff
+ruff check --fix llm_cost_ops
+```
+
+### Formatting
+
+```bash
+# Format with black
+black llm_cost_ops tests
+
+# Sort imports with isort
+isort llm_cost_ops tests
+```
+
+## Examples
+
+See the [examples/](examples/) directory for more detailed examples:
+
+- [Basic Usage](examples/basic_usage.py)
+- [Async Usage](examples/async_usage.py)
+- [Error Handling](examples/error_handling.py)
+- [Custom Configuration](examples/custom_config.py)
+- [Batch Processing](examples/batch_processing.py)
+
+## Support
+
+- **Documentation**: https://docs.llm-cost-ops.dev
+- **GitHub Issues**: https://github.com/llm-devops/llm-cost-ops/issues
+- **Discord**: https://discord.gg/llm-cost-ops
+- **Email**: support@llm-cost-ops.dev
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
+
+## License
+
+Apache 2.0 / MIT dual-licensed. See [LICENSE](../LICENSE) for details.

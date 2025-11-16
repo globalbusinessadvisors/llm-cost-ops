@@ -365,7 +365,6 @@ pub async fn start_webhook_server<H: IngestionHandler + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::UsageRecord;
     use async_trait::async_trait;
     use chrono::Utc;
     use uuid::Uuid;
@@ -415,7 +414,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_router() {
         let handler = MockHandler;
-        let router = create_webhook_router(handler);
+        let _router = create_webhook_router(handler);
         // Router creation should succeed
         assert!(true);
     }

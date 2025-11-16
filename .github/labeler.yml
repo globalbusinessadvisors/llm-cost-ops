@@ -1,0 +1,105 @@
+# Labeler configuration for automatic PR labeling
+# https://github.com/actions/labeler
+
+# Core components
+'api':
+  - changed-files:
+    - any-glob-to-any-file: 'src/api/**/*'
+
+'cli':
+  - changed-files:
+    - any-glob-to-any-file: 'src/cli/**/*'
+    - any-glob-to-any-file: 'src/bin/**/*'
+
+'storage':
+  - changed-files:
+    - any-glob-to-any-file: 'src/storage/**/*'
+    - any-glob-to-any-file: 'migrations/**/*'
+    - any-glob-to-any-file: 'migrations_postgres/**/*'
+
+'auth':
+  - changed-files:
+    - any-glob-to-any-file: 'src/auth/**/*'
+
+'forecasting':
+  - changed-files:
+    - any-glob-to-any-file: 'src/forecasting/**/*'
+
+'export':
+  - changed-files:
+    - any-glob-to-any-file: 'src/export/**/*'
+
+'observability':
+  - changed-files:
+    - any-glob-to-any-file: 'src/observability/**/*'
+
+'ingestion':
+  - changed-files:
+    - any-glob-to-any-file: 'src/ingestion/**/*'
+
+'domain':
+  - changed-files:
+    - any-glob-to-any-file: 'src/domain/**/*'
+
+'engine':
+  - changed-files:
+    - any-glob-to-any-file: 'src/engine/**/*'
+
+# Infrastructure
+'k8s':
+  - changed-files:
+    - any-glob-to-any-file: 'k8s/**/*'
+    - any-glob-to-any-file: 'Dockerfile'
+    - any-glob-to-any-file: 'docker-compose.yml'
+
+'ci':
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/**/*'
+    - any-glob-to-any-file: '.github/actions/**/*'
+
+# Documentation
+'documentation':
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
+    - any-glob-to-any-file: 'README.md'
+    - any-glob-to-any-file: 'CONTRIBUTING.md'
+    - any-glob-to-any-file: '**/*.md'
+
+# Tests
+'tests':
+  - changed-files:
+    - any-glob-to-any-file: 'tests/**/*'
+    - any-glob-to-any-file: 'benches/**/*'
+
+# Dependencies
+'dependencies':
+  - changed-files:
+    - any-glob-to-any-file: 'Cargo.toml'
+    - any-glob-to-any-file: 'Cargo.lock'
+    - any-glob-to-any-file: 'package.json'
+    - any-glob-to-any-file: 'package-lock.json'
+
+# Configuration
+'configuration':
+  - changed-files:
+    - any-glob-to-any-file: '**/*.toml'
+    - any-glob-to-any-file: '**/*.yaml'
+    - any-glob-to-any-file: '**/*.yml'
+    - any-glob-to-any-file: '.env*'
+
+# Examples
+'examples':
+  - changed-files:
+    - any-glob-to-any-file: 'examples/**/*'
+
+# Scripts
+'scripts':
+  - changed-files:
+    - any-glob-to-any-file: 'scripts/**/*'
+
+# Breaking changes (based on file patterns that often indicate breaking changes)
+'breaking-change':
+  - changed-files:
+    - any-glob-to-any-file: 'src/domain/**/*'
+    - any-glob-to-any-file: 'migrations/**/*'
+    - any-glob-to-any-file: 'src/api/routes/**/*'

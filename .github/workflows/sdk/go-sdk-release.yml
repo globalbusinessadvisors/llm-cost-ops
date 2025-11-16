@@ -1,0 +1,418 @@
+name: Go SDK - Release
+
+on:
+  push:
+    tags:
+      - 'v*-go'
+      - 'sdk/go/v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.2.3)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  GO_VERSION: '1.23'
+  WORKING_DIR: 'sdk/go'
+
+jobs:
+  # Validate release prerequisites
+  validate:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      is_prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get version from tag or input
+        id: get-version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            VERSION="${VERSION%-go}"
+            VERSION="${VERSION#sdk/go/}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "Invalid version format: $VERSION"
+            echo "Expected format: vX.Y.Z or vX.Y.Z-prerelease"
+            exit 1
+          fi
+
+      - name: Check if prerelease
+        id: check-prerelease
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if [[ "$VERSION" =~ -[a-zA-Z] ]] || [ "${{ github.event.inputs.prerelease }}" == "true" ]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify go.mod version
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code go.mod go.sum || (echo "go.mod/go.sum not tidy" && exit 1)
+
+      - name: Check for uncommitted changes
+        run: |
+          if ! git diff --quiet; then
+            echo "Uncommitted changes detected"
+            exit 1
+          fi
+
+  # Run comprehensive tests before release
+  test:
+    name: Pre-Release Testing
+    needs: validate
+    uses: ./.github/workflows/sdk/go-sdk-test.yml
+
+  # Security scan before release
+  security:
+    name: Security Scan
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run vulnerability check
+        working-directory: ${{ env.WORKING_DIR }}
+        run: govulncheck ./...
+
+      - name: Run go vet
+        working-directory: ${{ env.WORKING_DIR }}
+        run: go vet ./...
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run security scan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: gosec -fmt json -out security-report.json ./... || true
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: ${{ env.WORKING_DIR }}/security-report.json
+          retention-days: 90
+
+  # Build release artifacts
+  build:
+    name: Build Release Artifacts
+    needs: [validate, test, security]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build SDK
+        working-directory: ${{ env.WORKING_DIR }}
+        run: go build -v -ldflags="-s -w" ./...
+
+      - name: Run tests
+        working-directory: ${{ env.WORKING_DIR }}
+        run: go test -v ./...
+
+      - name: Build examples
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          for example in examples/*/; do
+            cd "$example"
+            go build -v .
+            cd - > /dev/null
+          done
+
+  # Generate documentation
+  documentation:
+    name: Generate Documentation
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install documentation tools
+        run: |
+          go install golang.org/x/tools/cmd/godoc@latest
+          go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@latest
+
+      - name: Generate API documentation
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          mkdir -p docs/release
+          gomarkdoc --output docs/release/API.md ./...
+
+      - name: Generate package documentation
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          go doc -all > docs/release/package-docs.txt
+
+      - name: Create documentation index
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          cat > docs/release/README.md << 'EOF'
+          # Go SDK Documentation - ${{ needs.validate.outputs.version }}
+
+          ## Installation
+
+          ```bash
+          go get github.com/llm-devops/llm-cost-ops/sdk/go@${{ needs.validate.outputs.version }}
+          ```
+
+          ## Quick Start
+
+          See [API Documentation](API.md) for detailed usage.
+
+          ## Examples
+
+          - [Basic Usage](../../examples/basic)
+          - [Advanced Usage](../../examples/advanced)
+
+          ## Resources
+
+          - [pkg.go.dev](https://pkg.go.dev/github.com/llm-devops/llm-cost-ops/sdk/go@${{ needs.validate.outputs.version }})
+          - [GitHub Repository](https://github.com/llm-devops/llm-cost-ops)
+          EOF
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-docs
+          path: ${{ env.WORKING_DIR }}/docs/release
+          retention-days: 90
+
+  # Create GitHub release
+  release:
+    name: Create GitHub Release
+    needs: [validate, test, security, build, documentation]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download documentation
+        uses: actions/download-artifact@v4
+        with:
+          name: release-docs
+          path: release-docs
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
+
+          echo "# Changelog" > CHANGELOG.md
+          echo "" >> CHANGELOG.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "## Changes since $PREV_TAG" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD -- sdk/go/ >> CHANGELOG.md
+          else
+            echo "## Initial Release" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log --pretty=format:"- %s (%h)" -- sdk/go/ >> CHANGELOG.md
+          fi
+
+          echo "" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "## Installation" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo '```bash' >> CHANGELOG.md
+          echo "go get github.com/llm-devops/llm-cost-ops/sdk/go@${VERSION}" >> CHANGELOG.md
+          echo '```' >> CHANGELOG.md
+
+      - name: Create release notes
+        run: |
+          cat > release-notes.md << 'EOF'
+          # Go SDK ${{ needs.validate.outputs.version }}
+
+          ## Installation
+
+          ```bash
+          go get github.com/llm-devops/llm-cost-ops/sdk/go@${{ needs.validate.outputs.version }}
+          ```
+
+          ## Documentation
+
+          - [API Documentation](https://pkg.go.dev/github.com/llm-devops/llm-cost-ops/sdk/go@${{ needs.validate.outputs.version }})
+          - [GitHub Repository](https://github.com/llm-devops/llm-cost-ops/tree/main/sdk/go)
+
+          ## What's Changed
+
+          EOF
+          cat CHANGELOG.md >> release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate.outputs.version }}-go
+          name: Go SDK ${{ needs.validate.outputs.version }}
+          body_path: release-notes.md
+          prerelease: ${{ needs.validate.outputs.is_prerelease }}
+          files: |
+            release-docs/**
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Go module proxy
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          curl "https://proxy.golang.org/github.com/llm-devops/llm-cost-ops/sdk/go/@v/${VERSION}.info" || true
+
+  # Update version tags
+  update-tags:
+    name: Update Version Tags
+    needs: [validate, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create/update major and minor tags
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+
+          # Extract version parts
+          VERSION_NO_V="${VERSION#v}"
+          MAJOR=$(echo $VERSION_NO_V | cut -d. -f1)
+          MINOR=$(echo $VERSION_NO_V | cut -d. -f2)
+
+          # Create major tag (v1)
+          git tag -fa "sdk/go/v${MAJOR}" -m "Go SDK v${MAJOR} (latest: ${VERSION})"
+          git push origin "sdk/go/v${MAJOR}" --force
+
+          # Create minor tag (v1.2)
+          git tag -fa "sdk/go/v${MAJOR}.${MINOR}" -m "Go SDK v${MAJOR}.${MINOR} (latest: ${VERSION})"
+          git push origin "sdk/go/v${MAJOR}.${MINOR}" --force
+
+  # Notify on completion
+  notify:
+    name: Release Notification
+    needs: [validate, release, update-tags]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create summary
+        run: |
+          echo "# Go SDK Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prerelease:** ${{ needs.validate.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Validation: ${{ needs.validate.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Testing: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security: ${{ needs.security.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Documentation: ${{ needs.documentation.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Release: ${{ needs.release.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Tags: ${{ needs.update-tags.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Installation" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "go get github.com/llm-devops/llm-cost-ops/sdk/go@${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Slack notification
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Go SDK ${{ needs.validate.outputs.version }} released successfully! :rocket:",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Go SDK Release Complete* :white_check_mark:\n*Version:* ${{ needs.validate.outputs.version }}\n*Installation:* `go get github.com/llm-devops/llm-cost-ops/sdk/go@${{ needs.validate.outputs.version }}`"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Release"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.version }}-go"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

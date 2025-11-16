@@ -1,0 +1,706 @@
+{
+  "info": {
+    "name": "LLM Cost Ops API",
+    "description": "Complete API collection for LLM Cost Ops platform. Includes all endpoints for cost tracking, analytics, budgets, alerts, and administration.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('api_key', response.token);",
+                  "    pm.test('Login successful', () => {",
+                  "        pm.expect(response).to.have.property('token');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "login"]
+            },
+            "description": "Authenticate user and receive API token"
+          },
+          "response": []
+        },
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"securePassword123\",\n  \"name\": \"John Doe\",\n  \"organization\": \"Example Corp\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "refresh"]
+            },
+            "description": "Refresh authentication token"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cost Tracking",
+      "item": [
+        {
+          "name": "Track Cost",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', () => {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has cost_id', () => {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('cost_id');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"gpt-4\",\n  \"input_tokens\": 1500,\n  \"output_tokens\": 500,\n  \"total_cost\": 0.045,\n  \"provider\": \"openai\",\n  \"project_id\": \"proj-123\",\n  \"user_id\": \"user-456\",\n  \"metadata\": {\n    \"endpoint\": \"/chat/completions\",\n    \"purpose\": \"customer_support\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cost-tracking",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cost-tracking"]
+            },
+            "description": "Track a new LLM API cost entry"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Cost Records",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data array', () => {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cost-tracking?start_date={{start_date}}&end_date={{end_date}}&limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cost-tracking"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "{{start_date}}"
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{end_date}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "model",
+                  "value": "gpt-4",
+                  "disabled": true
+                },
+                {
+                  "key": "project_id",
+                  "value": "proj-123",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Retrieve cost tracking records with filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Cost Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cost-tracking/summary?start_date={{start_date}}&end_date={{end_date}}&group_by=model",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cost-tracking", "summary"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "{{start_date}}"
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{end_date}}"
+                },
+                {
+                  "key": "group_by",
+                  "value": "model",
+                  "description": "model, project, user, date"
+                }
+              ]
+            },
+            "description": "Get aggregated cost summary"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Get Cost Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/analytics/costs?start_date={{start_date}}&end_date={{end_date}}&interval=daily",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analytics", "costs"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "{{start_date}}"
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{end_date}}"
+                },
+                {
+                  "key": "interval",
+                  "value": "daily",
+                  "description": "daily, weekly, monthly"
+                }
+              ]
+            },
+            "description": "Get cost analytics with time series data"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Model Comparison",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/analytics/models/comparison?start_date={{start_date}}&end_date={{end_date}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analytics", "models", "comparison"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "{{start_date}}"
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{end_date}}"
+                }
+              ]
+            },
+            "description": "Compare costs across different models"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Trend Analysis",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/analytics/trends?days=30&metric=cost",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analytics", "trends"],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                },
+                {
+                  "key": "metric",
+                  "value": "cost",
+                  "description": "cost, tokens, requests"
+                }
+              ]
+            },
+            "description": "Get trend analysis for specified metric"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Forecasts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/analytics/forecasts?days_ahead=30&model_type=prophet",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analytics", "forecasts"],
+              "query": [
+                {
+                  "key": "days_ahead",
+                  "value": "30"
+                },
+                {
+                  "key": "model_type",
+                  "value": "prophet",
+                  "description": "prophet, arima, lstm"
+                }
+              ]
+            },
+            "description": "Get cost forecasts"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Budgets",
+      "item": [
+        {
+          "name": "Create Budget",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Monthly Production Budget\",\n  \"amount\": 5000.00,\n  \"period\": \"monthly\",\n  \"start_date\": \"2024-01-01\",\n  \"end_date\": \"2024-12-31\",\n  \"alert_threshold\": 80,\n  \"filters\": {\n    \"project_id\": \"proj-123\",\n    \"environment\": \"production\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Create a new budget"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Budgets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/budgets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets"]
+            },
+            "description": "Get all budgets"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Budget Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}", "status"]
+            },
+            "description": "Get current budget status and utilization"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Budget",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 6000.00,\n  \"alert_threshold\": 85\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}"]
+            },
+            "description": "Update an existing budget"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Budget",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/budgets/{{budget_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "budgets", "{{budget_id}}"]
+            },
+            "description": "Delete a budget"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Alerts",
+      "item": [
+        {
+          "name": "Create Alert Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"High Daily Cost Alert\",\n  \"condition\": {\n    \"metric\": \"daily_cost\",\n    \"operator\": \"greater_than\",\n    \"threshold\": 500\n  },\n  \"notification_channels\": [\"email\", \"slack\"],\n  \"recipients\": [\"admin@example.com\"],\n  \"enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/alerts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "alerts"]
+            },
+            "description": "Create a new alert rule"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Alerts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/alerts?status=active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "alerts"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "active, triggered, resolved"
+                }
+              ]
+            },
+            "description": "Get all alert rules"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Alert History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/alerts/history?start_date={{start_date}}&end_date={{end_date}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "alerts", "history"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "{{start_date}}"
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{end_date}}"
+                }
+              ]
+            },
+            "description": "Get alert trigger history"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Generate Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_type\": \"cost_summary\",\n  \"start_date\": \"{{start_date}}\",\n  \"end_date\": \"{{end_date}}\",\n  \"format\": \"pdf\",\n  \"include_charts\": true,\n  \"filters\": {\n    \"project_id\": \"proj-123\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/reports/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reports", "generate"]
+            },
+            "description": "Generate a custom report"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Reports",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/reports",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reports"]
+            },
+            "description": "Get list of generated reports"
+          },
+          "response": []
+        },
+        {
+          "name": "Download Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/reports/{{report_id}}/download",
+              "host": ["{{base_url}}"],
+              "path": ["api", "reports", "{{report_id}}", "download"]
+            },
+            "description": "Download a generated report"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Production API\",\n  \"description\": \"Production LLM API integration\",\n  \"budget\": 5000,\n  \"tags\": [\"production\", \"api\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/projects",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects"]
+            },
+            "description": "Create a new project"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/projects",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects"]
+            },
+            "description": "Get all projects"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Project Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/projects/{{project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "projects", "{{project_id}}"]
+            },
+            "description": "Get project details"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get System Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "stats"]
+            },
+            "description": "Get system statistics"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users"]
+            },
+            "description": "Get all users (admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            },
+            "description": "API health check"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set default dates if not set",
+          "if (!pm.environment.get('start_date')) {",
+          "    const startDate = new Date();",
+          "    startDate.setDate(startDate.getDate() - 30);",
+          "    pm.environment.set('start_date', startDate.toISOString());",
+          "}",
+          "",
+          "if (!pm.environment.get('end_date')) {",
+          "    pm.environment.set('end_date', new Date().toISOString());",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test for all requests",
+          "pm.test('Response time is less than 2000ms', () => {",
+          "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+          "});"
+        ]
+      }
+    }
+  ]
+}

@@ -269,7 +269,6 @@ impl<R: UsageRepository> IngestionStorage for StorageAdapter<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{ModelIdentifier, Provider};
     use crate::ingestion::models::TokenUsageWebhook;
     use chrono::Utc;
 

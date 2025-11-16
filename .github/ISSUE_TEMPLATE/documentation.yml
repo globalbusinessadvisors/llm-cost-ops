@@ -1,0 +1,161 @@
+name: Documentation Improvement
+description: Suggest improvements to documentation
+title: "[Docs]: "
+labels: ["documentation", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve our documentation!
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following
+      options:
+        - label: I have searched existing documentation issues
+          required: true
+        - label: This is about documentation, not a bug or feature
+          required: true
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation needs improvement?
+      options:
+        - README
+        - Getting Started Guide
+        - Installation Instructions
+        - API Documentation
+        - Architecture Documentation
+        - Configuration Documentation
+        - Deployment Guide
+        - Troubleshooting Guide
+        - Examples
+        - Code Comments
+        - Contributing Guidelines
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue Type
+      description: What kind of documentation issue is this?
+      options:
+        - Missing Documentation
+        - Incorrect Documentation
+        - Unclear/Confusing Documentation
+        - Outdated Documentation
+        - Typo/Grammar
+        - Broken Link
+        - Missing Example
+        - Needs More Detail
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Where is this documentation located?
+      placeholder: "README.md, docs/ARCHITECTURE.md, line 123"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's Wrong?
+      description: Describe what's wrong with the current documentation
+      placeholder: |
+        Clearly explain what's missing, incorrect, or unclear.
+
+        Example: "The installation section doesn't mention that PostgreSQL 14+ is required for production deployments."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What Should It Say?
+      description: How should the documentation be improved?
+      placeholder: |
+        Describe what the documentation should say or include.
+
+        You can include proposed text, structure, or examples.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Why is this important? Who would benefit?
+      placeholder: |
+        Provide context about why this documentation is needed.
+
+        Example: "New users are getting confused during setup because the database requirements aren't clear upfront."
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposed-content
+    attributes:
+      label: Proposed Content
+      description: If you have specific text to add or change, include it here
+      placeholder: |
+        ```markdown
+        ## Database Requirements
+
+        ### Production Deployments
+
+        - PostgreSQL 14+ or TimescaleDB 2.0+
+        - Minimum 2GB RAM allocated to database
+        - At least 10GB storage for initial deployment
+        ```
+    validations:
+      required: false
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Target Audience
+      description: Who is this documentation for?
+      options:
+        - New Users
+        - Developers
+        - System Administrators
+        - DevOps Engineers
+        - Contributors
+        - All Users
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this documentation improvement?
+      options:
+        - High (Users are blocked or confused)
+        - Medium (Would help user experience)
+        - Low (Nice to have)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to help improve this?
+      options:
+        - label: I would be willing to submit a PR with documentation improvements
+          required: false

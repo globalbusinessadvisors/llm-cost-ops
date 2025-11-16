@@ -1,0 +1,348 @@
+name: SDK Release Orchestrator
+
+on:
+  push:
+    tags:
+      - 'python-v*'
+      - 'typescript-v*'
+      - 'rust-v*'
+      - 'go-v*'
+      - 'java-v*'
+  workflow_dispatch:
+    inputs:
+      sdk:
+        description: 'SDK to release'
+        required: true
+        type: choice
+        options:
+          - python
+          - typescript
+          - rust
+          - go
+          - java
+      version:
+        description: 'Version to release (e.g., 1.2.3)'
+        required: true
+        type: string
+      dry-run:
+        description: 'Perform a dry run'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  detect-sdk:
+    name: Detect SDK from Tag
+    runs-on: ubuntu-latest
+    outputs:
+      sdk: ${{ steps.detect.outputs.sdk }}
+      version: ${{ steps.detect.outputs.version }}
+      should-release: ${{ steps.detect.outputs.should-release }}
+      working-directory: ${{ steps.detect.outputs.working-directory }}
+
+    steps:
+      - name: Detect SDK and version
+        id: detect
+        run: |
+          # Manual workflow dispatch
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SDK="${{ inputs.sdk }}"
+            VERSION="${{ inputs.version }}"
+            SHOULD_RELEASE="true"
+          # Tag-based release
+          else
+            TAG="${{ github.ref_name }}"
+
+            # Extract SDK and version from tag
+            if [[ $TAG =~ ^(python|typescript|rust|go|java)-v(.+)$ ]]; then
+              SDK="${BASH_REMATCH[1]}"
+              VERSION="${BASH_REMATCH[2]}"
+              SHOULD_RELEASE="true"
+            else
+              echo "Tag format not recognized: $TAG"
+              SHOULD_RELEASE="false"
+            fi
+          fi
+
+          # Set working directory
+          case "$SDK" in
+            python)
+              WORKING_DIR="sdks/python"
+              ;;
+            typescript)
+              WORKING_DIR="sdks/typescript"
+              ;;
+            rust)
+              WORKING_DIR="sdks/rust"
+              ;;
+            go)
+              WORKING_DIR="sdks/go"
+              ;;
+            java)
+              WORKING_DIR="sdks/java"
+              ;;
+            *)
+              WORKING_DIR="."
+              ;;
+          esac
+
+          echo "sdk=$SDK" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "should-release=$SHOULD_RELEASE" >> $GITHUB_OUTPUT
+          echo "working-directory=$WORKING_DIR" >> $GITHUB_OUTPUT
+
+          echo "Detected SDK: $SDK, Version: $VERSION, Working Dir: $WORKING_DIR"
+
+      - name: Generate summary
+        run: |
+          echo "# Release Detection Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **SDK**: ${{ steps.detect.outputs.sdk }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.detect.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Should Release**: ${{ steps.detect.outputs.should-release }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Working Directory**: ${{ steps.detect.outputs.working-directory }}" >> $GITHUB_STEP_SUMMARY
+
+  version-check:
+    name: Check Version Consistency
+    needs: detect-sdk
+    if: needs.detect-sdk.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      version-valid: ${{ steps.validate.outputs.valid }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup language environment
+        uses: ./.github/actions/setup-${{ needs.detect-sdk.outputs.sdk }}
+        continue-on-error: true
+
+      - name: Validate version
+        id: validate
+        working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+        run: |
+          EXPECTED_VERSION="${{ needs.detect-sdk.outputs.version }}"
+          SDK="${{ needs.detect-sdk.outputs.sdk }}"
+          VALID="false"
+
+          case "$SDK" in
+            python)
+              if [ -f "pyproject.toml" ]; then
+                ACTUAL_VERSION=$(python -c "import toml; print(toml.load('pyproject.toml')['project']['version'])")
+              elif [ -f "setup.py" ]; then
+                ACTUAL_VERSION=$(python setup.py --version)
+              fi
+              ;;
+            typescript)
+              ACTUAL_VERSION=$(node -p "require('./package.json').version")
+              ;;
+            rust)
+              ACTUAL_VERSION=$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version')
+              ;;
+            go)
+              # Go uses tags
+              ACTUAL_VERSION="${{ needs.detect-sdk.outputs.version }}"
+              ;;
+            java)
+              if [ -f "gradle.properties" ]; then
+                ACTUAL_VERSION=$(grep "version=" gradle.properties | cut -d'=' -f2)
+              elif [ -f "pom.xml" ]; then
+                ACTUAL_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+              fi
+              ;;
+          esac
+
+          if [ "$EXPECTED_VERSION" = "$ACTUAL_VERSION" ]; then
+            VALID="true"
+            echo "Version matches: $ACTUAL_VERSION"
+          else
+            echo "Version mismatch! Expected: $EXPECTED_VERSION, Actual: $ACTUAL_VERSION"
+          fi
+
+          echo "valid=$VALID" >> $GITHUB_OUTPUT
+
+  generate-changelog:
+    name: Generate Changelog
+    needs: [detect-sdk, version-check]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    uses: ./.github/workflows/reusable/changelog-generator.yml
+    with:
+      language: ${{ needs.detect-sdk.outputs.sdk }}
+      working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+      version: ${{ needs.detect-sdk.outputs.version }}
+      format: 'conventional'
+
+  run-tests:
+    name: Run Full Test Suite
+    needs: [detect-sdk, version-check]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    uses: ./.github/workflows/reusable/test-matrix.yml
+    with:
+      language: ${{ needs.detect-sdk.outputs.sdk }}
+      working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+
+  security-scan:
+    name: Security Scan
+    needs: [detect-sdk, version-check]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    uses: ./.github/workflows/reusable/security-scan.yml
+    with:
+      language: ${{ needs.detect-sdk.outputs.sdk }}
+      working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+    secrets: inherit
+
+  coverage-report:
+    name: Coverage Report
+    needs: [detect-sdk, version-check]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    uses: ./.github/workflows/reusable/coverage-report.yml
+    with:
+      language: ${{ needs.detect-sdk.outputs.sdk }}
+      working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+    secrets: inherit
+
+  build-artifacts:
+    name: Build Release Artifacts
+    needs: [detect-sdk, version-check, run-tests, security-scan]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build artifacts
+        uses: ./.github/workflows/reusable/publish-package.yml
+        with:
+          language: ${{ needs.detect-sdk.outputs.sdk }}
+          working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+          version: ${{ needs.detect-sdk.outputs.version }}
+          dry-run: ${{ inputs.dry-run || false }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: [detect-sdk, version-check, generate-changelog, build-artifacts]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download changelog
+        uses: actions/download-artifact@v4
+        with:
+          name: changelog-${{ needs.detect-sdk.outputs.sdk }}
+          path: ./changelog
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ needs.detect-sdk.outputs.sdk }}
+          path: ./artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.detect-sdk.outputs.sdk }}-v${{ needs.detect-sdk.outputs.version }}
+          name: ${{ needs.detect-sdk.outputs.sdk }} SDK v${{ needs.detect-sdk.outputs.version }}
+          body_path: ./changelog/CHANGELOG.md
+          files: |
+            ./artifacts/*
+          draft: ${{ inputs.dry-run || false }}
+          prerelease: ${{ contains(needs.detect-sdk.outputs.version, 'alpha') || contains(needs.detect-sdk.outputs.version, 'beta') || contains(needs.detect-sdk.outputs.version, 'rc') }}
+
+  publish-package:
+    name: Publish Package
+    needs: [detect-sdk, version-check, create-release]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true' && !inputs.dry-run
+    uses: ./.github/workflows/reusable/publish-package.yml
+    with:
+      language: ${{ needs.detect-sdk.outputs.sdk }}
+      working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+      version: ${{ needs.detect-sdk.outputs.version }}
+      dry-run: false
+    secrets: inherit
+
+  deploy-docs:
+    name: Deploy Documentation
+    needs: [detect-sdk, version-check, create-release]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    uses: ./.github/workflows/reusable/docs-deploy.yml
+    with:
+      language: ${{ needs.detect-sdk.outputs.sdk }}
+      working-directory: ${{ needs.detect-sdk.outputs.working-directory }}
+      deploy-target: 'github-pages'
+    secrets: inherit
+
+  cross-sdk-compatibility:
+    name: Cross-SDK Compatibility Check
+    needs: [detect-sdk, version-check, publish-package]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check SDK version compatibility
+        run: |
+          echo "# Cross-SDK Compatibility Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Checking compatibility of ${{ needs.detect-sdk.outputs.sdk }} v${{ needs.detect-sdk.outputs.version }} with other SDKs..." >> $GITHUB_STEP_SUMMARY
+
+          # This would check version compatibility across SDKs
+          # For example, ensuring API versions match
+
+  notify-release:
+    name: Notify Release
+    needs: [detect-sdk, version-check, publish-package, deploy-docs]
+    if: needs.detect-sdk.outputs.should-release == 'true' && needs.version-check.outputs.version-valid == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create release summary
+        run: |
+          echo "# 🎉 Release Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Release Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **SDK**: ${{ needs.detect-sdk.outputs.sdk }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ needs.detect-sdk.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${{ needs.detect-sdk.outputs.sdk }}-v${{ needs.detect-sdk.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security scan completed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Package published" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Documentation deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Verify package installation" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test in production environment" >> $GITHUB_STEP_SUMMARY
+          echo "3. Announce release to users" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create Slack notification
+        if: secrets.SLACK_WEBHOOK_URL != ''
+        run: |
+          curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "text": "New SDK Release",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚀 *New SDK Release*\n*SDK*: ${{ needs.detect-sdk.outputs.sdk }}\n*Version*: ${{ needs.detect-sdk.outputs.version }}"
+                  }
+                }
+              ]
+            }'

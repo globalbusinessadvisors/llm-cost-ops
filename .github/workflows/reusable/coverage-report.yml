@@ -1,0 +1,340 @@
+name: Reusable Coverage Report
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      coverage-threshold:
+        required: false
+        type: number
+        default: 80
+        description: 'Minimum coverage percentage required'
+      fail-on-threshold:
+        required: false
+        type: boolean
+        default: false
+        description: 'Fail the workflow if coverage is below threshold'
+      upload-to-codecov:
+        required: false
+        type: boolean
+        default: true
+        description: 'Upload coverage to Codecov'
+      generate-badge:
+        required: false
+        type: boolean
+        default: true
+        description: 'Generate coverage badge'
+    outputs:
+      coverage-percentage:
+        description: 'Overall coverage percentage'
+        value: ${{ jobs.coverage.outputs.coverage-percentage }}
+      coverage-report:
+        description: 'Path to coverage report'
+        value: ${{ jobs.coverage.outputs.coverage-report }}
+      badge-url:
+        description: 'Coverage badge URL'
+        value: ${{ jobs.coverage.outputs.badge-url }}
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+        description: 'Codecov token'
+
+jobs:
+  coverage:
+    name: Generate Coverage Report
+    runs-on: ubuntu-latest
+    outputs:
+      coverage-percentage: ${{ steps.coverage.outputs.percentage }}
+      coverage-report: ${{ steps.coverage.outputs.report-path }}
+      badge-url: ${{ steps.badge.outputs.url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python coverage
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-cov coverage[toml]
+          pip install -e ".[dev]" || pip install -e "." || true
+
+      - name: Run Python tests with coverage
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pytest --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing --cov-report=json
+          coverage report --format=markdown >> coverage_report.md
+
+      - name: Extract Python coverage
+        if: inputs.language == 'python'
+        id: python-coverage
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          COVERAGE=$(python -c "import json; data=json.load(open('coverage.json')); print(f\"{data['totals']['percent_covered']:.2f}\")")
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "report-path=coverage.xml" >> $GITHUB_OUTPUT
+
+      # TypeScript/JavaScript coverage
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install TypeScript dependencies
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run TypeScript tests with coverage
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npm run test:coverage || npx jest --coverage || true
+
+      - name: Extract TypeScript coverage
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        id: typescript-coverage
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ -f "coverage/coverage-summary.json" ]; then
+            COVERAGE=$(node -p "JSON.parse(require('fs').readFileSync('coverage/coverage-summary.json')).total.lines.pct")
+          else
+            COVERAGE="0"
+          fi
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "report-path=coverage/lcov.info" >> $GITHUB_OUTPUT
+
+      # Go coverage
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Run Go tests with coverage
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out -o coverage.txt
+
+      - name: Extract Go coverage
+        if: inputs.language == 'go'
+        id: go-coverage
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "report-path=coverage.out" >> $GITHUB_OUTPUT
+
+      # Rust coverage
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        if: inputs.language == 'rust'
+        run: cargo install cargo-llvm-cov
+
+      - name: Run Rust tests with coverage
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          cargo llvm-cov --all-features --workspace --html
+          cargo llvm-cov report --summary-only --json --output-path coverage.json
+
+      - name: Extract Rust coverage
+        if: inputs.language == 'rust'
+        id: rust-coverage
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          COVERAGE=$(jq -r '.data[0].totals.lines.percent' coverage.json)
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "report-path=lcov.info" >> $GITHUB_OUTPUT
+
+      # Java coverage
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Run Java tests with coverage
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          ./gradlew test jacocoTestReport || ./mvnw test jacoco:report
+
+      - name: Extract Java coverage
+        if: inputs.language == 'java'
+        id: java-coverage
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # For Gradle JaCoCo
+          if [ -f "build/reports/jacoco/test/jacocoTestReport.xml" ]; then
+            COVERAGE=$(grep -oP 'line-rate="\K[^"]*' build/reports/jacoco/test/jacocoTestReport.xml | head -1 | awk '{print $1 * 100}')
+            echo "report-path=build/reports/jacoco/test/jacocoTestReport.xml" >> $GITHUB_OUTPUT
+          # For Maven JaCoCo
+          elif [ -f "target/site/jacoco/jacoco.xml" ]; then
+            COVERAGE=$(grep -oP 'INSTRUCTION.*covered="\K[^"]*' target/site/jacoco/jacoco.xml | head -1 | awk '{print $1 * 100}')
+            echo "report-path=target/site/jacoco/jacoco.xml" >> $GITHUB_OUTPUT
+          else
+            COVERAGE="0"
+            echo "report-path=coverage.xml" >> $GITHUB_OUTPUT
+          fi
+          echo "percentage=$COVERAGE" >> $GITHUB_OUTPUT
+
+      # Consolidate coverage results
+      - name: Set coverage outputs
+        id: coverage
+        run: |
+          case "${{ inputs.language }}" in
+            python)
+              echo "percentage=${{ steps.python-coverage.outputs.percentage }}" >> $GITHUB_OUTPUT
+              echo "report-path=${{ steps.python-coverage.outputs.report-path }}" >> $GITHUB_OUTPUT
+              ;;
+            typescript|javascript)
+              echo "percentage=${{ steps.typescript-coverage.outputs.percentage }}" >> $GITHUB_OUTPUT
+              echo "report-path=${{ steps.typescript-coverage.outputs.report-path }}" >> $GITHUB_OUTPUT
+              ;;
+            go)
+              echo "percentage=${{ steps.go-coverage.outputs.percentage }}" >> $GITHUB_OUTPUT
+              echo "report-path=${{ steps.go-coverage.outputs.report-path }}" >> $GITHUB_OUTPUT
+              ;;
+            rust)
+              echo "percentage=${{ steps.rust-coverage.outputs.percentage }}" >> $GITHUB_OUTPUT
+              echo "report-path=${{ steps.rust-coverage.outputs.report-path }}" >> $GITHUB_OUTPUT
+              ;;
+            java)
+              echo "percentage=${{ steps.java-coverage.outputs.percentage }}" >> $GITHUB_OUTPUT
+              echo "report-path=${{ steps.java-coverage.outputs.report-path }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      # Upload to Codecov
+      - name: Upload to Codecov
+        if: inputs.upload-to-codecov && secrets.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ inputs.working-directory }}/${{ steps.coverage.outputs.report-path }}
+          flags: ${{ inputs.language }}
+          name: ${{ inputs.language }}-coverage
+          fail_ci_if_error: false
+
+      # Generate coverage badge
+      - name: Generate coverage badge
+        if: inputs.generate-badge
+        id: badge
+        run: |
+          COVERAGE="${{ steps.coverage.outputs.percentage }}"
+
+          # Determine badge color
+          if (( $(echo "$COVERAGE >= 90" | bc -l) )); then
+            COLOR="brightgreen"
+          elif (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+            COLOR="green"
+          elif (( $(echo "$COVERAGE >= 70" | bc -l) )); then
+            COLOR="yellowgreen"
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+            COLOR="yellow"
+          elif (( $(echo "$COVERAGE >= 50" | bc -l) )); then
+            COLOR="orange"
+          else
+            COLOR="red"
+          fi
+
+          # Generate badge URL
+          BADGE_URL="https://img.shields.io/badge/coverage-${COVERAGE}%25-${COLOR}"
+          echo "url=$BADGE_URL" >> $GITHUB_OUTPUT
+
+          # Create badge file
+          mkdir -p badges
+          curl -o "badges/coverage-${{ inputs.language }}.svg" "$BADGE_URL"
+
+      # Upload coverage reports
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ inputs.language }}
+          path: |
+            ${{ inputs.working-directory }}/coverage*
+            ${{ inputs.working-directory }}/*.html
+            ${{ inputs.working-directory }}/badges/
+            ${{ inputs.working-directory }}/build/reports/jacoco/
+            ${{ inputs.working-directory }}/target/site/jacoco/
+          retention-days: 90
+
+      # Check threshold
+      - name: Check coverage threshold
+        if: inputs.fail-on-threshold
+        run: |
+          COVERAGE="${{ steps.coverage.outputs.percentage }}"
+          THRESHOLD="${{ inputs.coverage-threshold }}"
+
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "Coverage ($COVERAGE%) is below threshold ($THRESHOLD%)"
+            exit 1
+          fi
+
+      # Generate summary
+      - name: Generate summary
+        run: |
+          COVERAGE="${{ steps.coverage.outputs.percentage }}"
+          THRESHOLD="${{ inputs.coverage-threshold }}"
+
+          echo "# Coverage Report Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "![Coverage Badge](${{ steps.badge.outputs.url }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Language**: ${{ inputs.language }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Coverage**: ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Threshold**: ${THRESHOLD}%" >> $GITHUB_STEP_SUMMARY
+
+          if (( $(echo "$COVERAGE >= $THRESHOLD" | bc -l) )); then
+            echo "- **Status**: ✅ PASSED" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: ⚠️ BELOW THRESHOLD" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Coverage Details" >> $GITHUB_STEP_SUMMARY
+
+          # Add language-specific coverage details
+          case "${{ inputs.language }}" in
+            python)
+              if [ -f "${{ inputs.working-directory }}/coverage_report.md" ]; then
+                cat "${{ inputs.working-directory }}/coverage_report.md" >> $GITHUB_STEP_SUMMARY
+              fi
+              ;;
+            rust)
+              if [ -f "${{ inputs.working-directory }}/coverage.json" ]; then
+                echo '```json' >> $GITHUB_STEP_SUMMARY
+                cat "${{ inputs.working-directory }}/coverage.json" >> $GITHUB_STEP_SUMMARY
+                echo '```' >> $GITHUB_STEP_SUMMARY
+              fi
+              ;;
+          esac

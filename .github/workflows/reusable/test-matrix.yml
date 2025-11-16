@@ -1,0 +1,200 @@
+name: Reusable Test Matrix
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language/platform: python, typescript, go, java, rust'
+      test-command:
+        required: true
+        type: string
+        description: 'Command to run tests'
+      coverage-enabled:
+        required: false
+        type: boolean
+        default: true
+        description: 'Enable code coverage reporting'
+      install-command:
+        required: false
+        type: string
+        default: ''
+        description: 'Custom installation command'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      matrix-os:
+        required: false
+        type: string
+        default: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+        description: 'JSON array of OS to test on'
+      matrix-versions:
+        required: false
+        type: string
+        default: '["stable"]'
+        description: 'JSON array of language versions'
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+        description: 'Codecov upload token'
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_COLOR: 1
+  PYTHONUNBUFFERED: 1
+
+jobs:
+  test-matrix:
+    name: Test (${{ matrix.os }}, ${{ matrix.version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJson(inputs.matrix-os) }}
+        version: ${{ fromJson(inputs.matrix-versions) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python Setup
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.version }}
+          cache: 'pip'
+          cache-dependency-path: '${{ inputs.working-directory }}/requirements*.txt'
+
+      # Node.js/TypeScript Setup
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.version }}
+          cache: 'npm'
+          cache-dependency-path: '${{ inputs.working-directory }}/package-lock.json'
+
+      # Go Setup
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.version }}
+          cache-dependency-path: '${{ inputs.working-directory }}/go.sum'
+
+      # Java Setup
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.version }}
+          cache: 'gradle'
+
+      # Rust Setup
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ matrix.version }}
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        if: inputs.language == 'rust'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '${{ inputs.working-directory }}'
+
+      # Install dependencies
+      - name: Install dependencies (Python)
+        if: inputs.language == 'python' && inputs.install-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,test]"
+
+      - name: Install dependencies (TypeScript)
+        if: inputs.language == 'typescript' && inputs.install-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Install dependencies (Go)
+        if: inputs.language == 'go' && inputs.install-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: go mod download
+
+      - name: Install dependencies (Java)
+        if: inputs.language == 'java' && inputs.install-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew dependencies
+
+      - name: Install dependencies (Custom)
+        if: inputs.install-command != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.install-command }}
+
+      # Run tests
+      - name: Run tests
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.test-command }}
+
+      # Coverage - Python
+      - name: Generate coverage report (Python)
+        if: inputs.language == 'python' && inputs.coverage-enabled && matrix.os == 'ubuntu-latest' && matrix.version == 'stable' || matrix.version == '3.12'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install pytest-cov
+          pytest --cov=. --cov-report=xml --cov-report=html
+
+      # Coverage - TypeScript
+      - name: Generate coverage report (TypeScript)
+        if: inputs.language == 'typescript' && inputs.coverage-enabled && matrix.os == 'ubuntu-latest'
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run test:coverage || npm test -- --coverage
+
+      # Coverage - Go
+      - name: Generate coverage report (Go)
+        if: inputs.language == 'go' && inputs.coverage-enabled && matrix.os == 'ubuntu-latest'
+        working-directory: ${{ inputs.working-directory }}
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      # Coverage - Java
+      - name: Generate coverage report (Java)
+        if: inputs.language == 'java' && inputs.coverage-enabled && matrix.os == 'ubuntu-latest'
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew jacocoTestReport
+
+      # Coverage - Rust
+      - name: Generate coverage report (Rust)
+        if: inputs.language == 'rust' && inputs.coverage-enabled && matrix.os == 'ubuntu-latest'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo install cargo-tarpaulin || true
+          cargo tarpaulin --out Xml --out Html --output-dir ./coverage
+
+      # Upload coverage
+      - name: Upload coverage to Codecov
+        if: inputs.coverage-enabled && matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml,./coverage.out,./coverage/cobertura.xml
+          flags: ${{ inputs.language }}-${{ matrix.version }}
+          name: ${{ inputs.language }}-${{ matrix.os }}-${{ matrix.version }}
+          fail_ci_if_error: false
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Archive coverage report
+        if: inputs.coverage-enabled && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ inputs.language }}-${{ matrix.version }}
+          path: |
+            ${{ inputs.working-directory }}/coverage/
+            ${{ inputs.working-directory }}/htmlcov/
+            ${{ inputs.working-directory }}/coverage/
+          retention-days: 30

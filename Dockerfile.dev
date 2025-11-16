@@ -1,0 +1,52 @@
+# Development Dockerfile for LLM Cost Ops
+# Includes development tools and hot-reload support
+# Version: 1.0.0
+
+FROM rust:1.75-bullseye
+
+# Install development dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libpq-dev \
+    libsqlite3-dev \
+    postgresql-client \
+    sqlite3 \
+    build-essential \
+    curl \
+    git \
+    vim \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install development tools
+RUN cargo install cargo-watch cargo-edit sqlx-cli cargo-audit cargo-outdated
+
+# Create app directory
+WORKDIR /app
+
+# Create non-root user for development
+RUN groupadd -r dev && \
+    useradd -r -g dev -s /bin/bash -m dev && \
+    chown -R dev:dev /app
+
+# Switch to dev user
+USER dev
+
+# Expose ports
+EXPOSE 8080 9090 5432
+
+# Environment variables for development
+ENV RUST_LOG=debug \
+    RUST_BACKTRACE=1 \
+    DATABASE_URL=postgres://postgres:postgres@postgres:5432/llm_cost_ops_dev \
+    CONFIG_PATH=/app/config.toml \
+    LOG_LEVEL=debug \
+    PORT=8080 \
+    METRICS_PORT=9090
+
+# Volume for source code (for hot-reload)
+VOLUME ["/app"]
+
+# Default command: watch and rebuild on changes
+CMD ["cargo", "watch", "-x", "run"]

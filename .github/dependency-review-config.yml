@@ -1,0 +1,53 @@
+# Dependency Review Configuration for TypeScript SDK
+# https://github.com/actions/dependency-review-action
+
+# Fail the action if any dependency has a vulnerability with the given severity or higher
+fail-on-severity: high
+
+# Fail the action if any dependency is under a license that is not allowed
+allow-licenses:
+  - MIT
+  - Apache-2.0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - ISC
+  - 0BSD
+  - CC0-1.0
+  - Unlicense
+
+# Fail the action if any dependency is under a license that is denied
+deny-licenses:
+  - GPL
+  - LGPL
+  - AGPL
+  - SSPL
+  - CC-BY-NC
+  - CC-BY-NC-SA
+  - CC-BY-NC-ND
+
+# Block packages with these names
+# deny-packages:
+#   - lodash  # Example: prefer lodash-es
+
+# Allow these groups (useful for monorepos)
+# allow-groups:
+#   - '@llm-cost-ops'
+
+# Comment on PRs with the results
+comment-summary-in-pr: always
+
+# Fail on scoped package groups (e.g., @company/*)
+fail-on-scoped-registries: false
+
+# Check for deprecated dependencies
+warn-on-deprecated: true
+
+# Vulnerability database source
+vulnerability-check: true
+
+# License check
+license-check: true
+
+# Configure retry behavior
+retry-on-snapshot-warnings: true
+retry-on-snapshot-warnings-timeout: 120

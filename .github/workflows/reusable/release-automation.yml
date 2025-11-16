@@ -1,0 +1,426 @@
+name: Reusable Release Automation
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      version-bump:
+        required: false
+        type: string
+        default: 'auto'
+        description: 'Version bump type: auto, major, minor, patch'
+      changelog-generate:
+        required: false
+        type: boolean
+        default: true
+        description: 'Automatically generate changelog'
+      create-github-release:
+        required: false
+        type: boolean
+        default: true
+        description: 'Create GitHub release'
+      trigger-publish:
+        required: false
+        type: boolean
+        default: false
+        description: 'Trigger package publishing workflow'
+    outputs:
+      version:
+        description: 'New version number'
+        value: ${{ jobs.release.outputs.version }}
+      changelog:
+        description: 'Generated changelog'
+        value: ${{ jobs.release.outputs.changelog }}
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      version: ${{ steps.version.outputs.new_version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for changelog
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Python versioning
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python versioning tools
+        if: inputs.language == 'python'
+        run: |
+          pip install --upgrade pip
+          pip install bump2version setuptools-scm
+
+      - name: Bump Python version
+        if: inputs.language == 'python'
+        id: python-version
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ "${{ inputs.version-bump }}" = "auto" ]; then
+            # Analyze commits to determine bump type
+            if git log --format=%B -n 1 | grep -q "BREAKING CHANGE:"; then
+              BUMP_TYPE="major"
+            elif git log --format=%B -n 1 | grep -q "^feat"; then
+              BUMP_TYPE="minor"
+            else
+              BUMP_TYPE="patch"
+            fi
+          else
+            BUMP_TYPE="${{ inputs.version-bump }}"
+          fi
+
+          echo "Bumping $BUMP_TYPE version"
+          bump2version $BUMP_TYPE --allow-dirty || true
+
+          # Get new version
+          NEW_VERSION=$(python -c "import setuptools_scm; print(setuptools_scm.get_version())" || echo "0.1.0")
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      # TypeScript/JavaScript versioning
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Bump TypeScript version
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        id: typescript-version
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ "${{ inputs.version-bump }}" = "auto" ]; then
+            # Analyze commits
+            if git log --format=%B -n 1 | grep -q "BREAKING CHANGE:"; then
+              BUMP_TYPE="major"
+            elif git log --format=%B -n 1 | grep -q "^feat"; then
+              BUMP_TYPE="minor"
+            else
+              BUMP_TYPE="patch"
+            fi
+          else
+            BUMP_TYPE="${{ inputs.version-bump }}"
+          fi
+
+          npm version $BUMP_TYPE --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      # Go versioning (uses Git tags)
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Determine Go version
+        if: inputs.language == 'go'
+        id: go-version
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Get latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Parse version
+          MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | tr -d 'v')
+          MINOR=$(echo $LATEST_TAG | cut -d. -f2)
+          PATCH=$(echo $LATEST_TAG | cut -d. -f3)
+
+          # Determine bump
+          if [ "${{ inputs.version-bump }}" = "auto" ]; then
+            if git log --format=%B -n 1 | grep -q "BREAKING CHANGE:"; then
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+            elif git log --format=%B -n 1 | grep -q "^feat"; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            else
+              PATCH=$((PATCH + 1))
+            fi
+          elif [ "${{ inputs.version-bump }}" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "${{ inputs.version-bump }}" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      # Java versioning
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Bump Java version
+        if: inputs.language == 'java'
+        id: java-version
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Read current version from gradle.properties
+          CURRENT_VERSION=$(grep "^version=" gradle.properties | cut -d'=' -f2)
+
+          # Parse and bump
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+
+          if [ "${{ inputs.version-bump }}" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "${{ inputs.version-bump }}" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+
+          # Update gradle.properties
+          sed -i "s/^version=.*/version=$NEW_VERSION/" gradle.properties
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      # Rust versioning
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Bump Rust version
+        if: inputs.language == 'rust'
+        id: rust-version
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Install cargo-edit for version bumping
+          cargo install cargo-edit || true
+
+          if [ "${{ inputs.version-bump }}" = "auto" ]; then
+            if git log --format=%B -n 1 | grep -q "BREAKING CHANGE:"; then
+              BUMP_TYPE="major"
+            elif git log --format=%B -n 1 | grep -q "^feat"; then
+              BUMP_TYPE="minor"
+            else
+              BUMP_TYPE="patch"
+            fi
+          else
+            BUMP_TYPE="${{ inputs.version-bump }}"
+          fi
+
+          cargo set-version --bump $BUMP_TYPE
+          NEW_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      # Consolidate version output
+      - name: Set version output
+        id: version
+        run: |
+          if [ -n "${{ steps.python-version.outputs.new_version }}" ]; then
+            echo "new_version=${{ steps.python-version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ steps.typescript-version.outputs.new_version }}" ]; then
+            echo "new_version=${{ steps.typescript-version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ steps.go-version.outputs.new_version }}" ]; then
+            echo "new_version=${{ steps.go-version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ steps.java-version.outputs.new_version }}" ]; then
+            echo "new_version=${{ steps.java-version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ steps.rust-version.outputs.new_version }}" ]; then
+            echo "new_version=${{ steps.rust-version.outputs.new_version }}" >> $GITHUB_OUTPUT
+          fi
+
+      # Generate changelog
+      - name: Generate changelog
+        if: inputs.changelog-generate
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: |
+            {
+              "categories": [
+                {
+                  "title": "## 🚀 Features",
+                  "labels": ["feature", "feat"]
+                },
+                {
+                  "title": "## 🐛 Bug Fixes",
+                  "labels": ["fix", "bugfix"]
+                },
+                {
+                  "title": "## 📝 Documentation",
+                  "labels": ["docs", "documentation"]
+                },
+                {
+                  "title": "## 🔧 Maintenance",
+                  "labels": ["chore", "dependencies"]
+                },
+                {
+                  "title": "## ⚡ Performance",
+                  "labels": ["perf", "performance"]
+                }
+              ],
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}"
+            }
+          outputFile: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Commit version changes
+      - name: Commit version bump
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          git add .
+          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}" || echo "No changes to commit"
+
+      # Create Git tag
+      - name: Create Git tag
+        run: |
+          VERSION="${{ steps.version.outputs.new_version }}"
+          # Add 'v' prefix for Go
+          if [ "${{ inputs.language }}" = "go" ] && [[ ! $VERSION =~ ^v ]]; then
+            VERSION="v${VERSION}"
+          fi
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin HEAD --tags
+
+      # Create GitHub Release
+      - name: Create GitHub Release
+        if: inputs.create-github-release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.new_version }}
+          name: Release ${{ steps.version.outputs.new_version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generateReleaseNotes: true
+
+      # Upload release artifacts
+      - name: Build release artifacts (Python)
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install build
+          python -m build
+
+      - name: Build release artifacts (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npm ci
+          npm run build
+          npm pack
+
+      - name: Build release artifacts (Rust)
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo build --release
+          cargo package
+
+      - name: Build release artifacts (Go)
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o dist/app-linux-amd64
+          GOOS=darwin GOARCH=amd64 go build -o dist/app-darwin-amd64
+          GOOS=windows GOARCH=amd64 go build -o dist/app-windows-amd64.exe
+
+      - name: Upload release artifacts
+        if: inputs.create-github-release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.new_version }}
+          files: |
+            ${{ inputs.working-directory }}/dist/**/*
+            ${{ inputs.working-directory }}/*.whl
+            ${{ inputs.working-directory }}/*.tar.gz
+            ${{ inputs.working-directory }}/*.tgz
+            ${{ inputs.working-directory }}/target/package/*.crate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trigger-publish:
+    name: Trigger Publishing
+    needs: release
+    if: inputs.trigger-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger publish workflow
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: publish-package
+          client-payload: '{"version": "${{ needs.release.outputs.version }}", "language": "${{ inputs.language }}"}'
+
+  announce:
+    name: Announce Release
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release summary
+        run: |
+          echo "# 🎉 Release ${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## What's Changed" >> $GITHUB_STEP_SUMMARY
+          echo "${{ needs.release.outputs.changelog }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Installation" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ inputs.language }}" = "python" ]; then
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "pip install llm-cost-ops-sdk==${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ inputs.language }}" = "typescript" ]; then
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "npm install @llm-cost-ops/sdk@${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ inputs.language }}" = "go" ]; then
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "go get github.com/llm-cost-ops/sdk-go@${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ inputs.language }}" = "rust" ]; then
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "cargo add llm-cost-ops-sdk@${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi

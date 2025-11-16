@@ -1,0 +1,123 @@
+{{- if include "llm-cost-ops.createConfigMap" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "llm-cost-ops.configMapName" . }}
+  labels:
+    {{- include "llm-cost-ops.labels" . | nindent 4 }}
+data:
+  # Application configuration
+  app-config.toml: |
+    [database]
+    url = "{{ include "llm-cost-ops.databaseUrl" . }}"
+    pool_size = {{ .Values.config.database.poolSize }}
+
+    {{- if .Values.config.api }}
+    [api]
+    bind = "{{ .Values.config.api.host }}"
+    port = {{ .Values.config.api.port }}
+    {{- end }}
+
+    [logging]
+    level = "{{ .Values.config.logging.level }}"
+    json = {{ eq .Values.config.logging.format "json" }}
+
+    {{- if .Values.config.metrics.enabled }}
+    [metrics]
+    enabled = true
+    port = {{ .Values.config.metrics.port }}
+    path = "{{ .Values.config.metrics.path }}"
+    {{- end }}
+
+    {{- if .Values.config.auth.enabled }}
+    [auth]
+    enabled = true
+
+    [auth.jwt]
+    expiration_secs = {{ .Values.config.auth.jwt.expirationSecs }}
+    issuer = "{{ .Values.config.auth.jwt.issuer }}"
+    audience = "{{ .Values.config.auth.jwt.audience }}"
+
+    {{- if .Values.config.auth.rbac.enabled }}
+    [auth.rbac]
+    enabled = true
+    default_role = "{{ .Values.config.auth.rbac.defaultRole }}"
+    {{- end }}
+    {{- end }}
+
+    {{- if .Values.config.rateLimit.enabled }}
+    [rate_limit]
+    enabled = true
+    requests_per_sec = {{ .Values.config.rateLimit.requestsPerSec }}
+    burst_size = {{ .Values.config.rateLimit.burstSize }}
+    storage = "{{ .Values.config.rateLimit.storage }}"
+    {{- end }}
+
+    {{- if .Values.config.ingestion.enabled }}
+    [ingestion]
+    enabled = true
+    batch_size = {{ .Values.config.ingestion.batchSize }}
+    flush_interval = {{ .Values.config.ingestion.flushInterval }}
+    enable_validation = {{ .Values.config.ingestion.enableValidation }}
+    max_payload_size = {{ .Values.config.ingestion.maxPayloadSize }}
+    {{- end }}
+
+    {{- if .Values.config.streaming.enabled }}
+    [streaming]
+    enabled = true
+    backend = "{{ .Values.config.streaming.backend }}"
+    {{- end }}
+
+    {{- if .Values.config.dlq.enabled }}
+    [dlq]
+    enabled = true
+    max_retries = {{ .Values.config.dlq.maxRetries }}
+    retry_delay = {{ .Values.config.dlq.retryDelay }}
+    storage = "{{ .Values.config.dlq.storage }}"
+    {{- if eq .Values.config.dlq.storage "file" }}
+    file_path = "{{ .Values.config.dlq.filePath }}"
+    {{- end }}
+    {{- end }}
+
+    {{- if .Values.config.export.enabled }}
+    [export]
+    enabled = true
+    directory = "{{ .Values.config.export.directory }}"
+    max_size_mb = {{ .Values.config.export.maxSizeMB }}
+
+    {{- if .Values.config.export.scheduling.enabled }}
+    [export.scheduling]
+    enabled = true
+    timezone = "{{ .Values.config.export.scheduling.timezone }}"
+    {{- end }}
+    {{- end }}
+
+    {{- if .Values.config.forecasting.enabled }}
+    [forecasting]
+    enabled = true
+    window_days = {{ .Values.config.forecasting.windowDays }}
+    anomaly_detection = {{ .Values.config.forecasting.anomalyDetection }}
+    {{- if .Values.config.forecasting.anomalyDetection }}
+    anomaly_threshold = {{ .Values.config.forecasting.anomalyThreshold }}
+    {{- end }}
+    {{- end }}
+
+    {{- if .Values.config.budgetAlerts.enabled }}
+    [budget_alerts]
+    enabled = true
+    check_interval = {{ .Values.config.budgetAlerts.checkInterval }}
+    thresholds = [{{ range $i, $v := .Values.config.budgetAlerts.thresholds }}{{if $i}}, {{end}}{{ $v }}{{end}}]
+    {{- end }}
+
+    {{- if .Values.config.compression.enabled }}
+    [compression]
+    enabled = true
+    algorithm = "{{ .Values.config.compression.algorithm }}"
+    level = {{ .Values.config.compression.level }}
+    min_size = {{ .Values.config.compression.minSize }}
+    {{- end }}
+
+  {{- with .Values.configMap.data }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}

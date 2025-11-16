@@ -1,25 +1,53 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: default
+namespace: llm-cost-ops
 
 commonLabels:
   app.kubernetes.io/name: llm-cost-ops
   app.kubernetes.io/managed-by: kustomize
 
 resources:
+# Namespace and core resources
+- namespace.yaml
+- serviceaccount.yaml
+- rbac.yaml
+
+# Application
+- configmap.yaml
+- secret.yaml
 - deployment.yaml
 - service.yaml
 - ingress.yaml
-- configmap.yaml
-- secret.yaml
+
+# Autoscaling and availability
 - hpa.yaml
 - pdb.yaml
-- rbac.yaml
+
+# Security and networking
 - networkpolicy.yaml
+
+# Monitoring
 - servicemonitor.yaml
 
 images:
 - name: llm-cost-ops
   newName: ghcr.io/your-org/llm-cost-ops
   newTag: latest
+
+# Configuration transformers
+configMapGenerator:
+- name: llm-cost-ops-config
+  behavior: merge
+  literals:
+  - ENVIRONMENT=production
+  - LOG_LEVEL=info
+  - RUST_LOG=info,llm_cost_ops=debug
+
+# Secret generator (use for default/placeholder values only)
+# In production, use external secret management (e.g., sealed-secrets, external-secrets)
+secretGenerator:
+- name: llm-cost-ops-secrets
+  behavior: merge
+  literals:
+  - DATABASE_URL=postgresql://postgres:CHANGE_ME@postgres:5432/llm_cost_ops

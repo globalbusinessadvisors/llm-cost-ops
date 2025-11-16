@@ -141,8 +141,10 @@ impl<S: DlqStore + 'static, H: DlqItemHandler + 'static> DlqProcessor<S, H> {
     /// Process a single DLQ item
     async fn process_item(&self, mut item: DlqItem) -> DlqResult<ProcessingStats> {
         let start = Instant::now();
-        let mut stats = ProcessingStats::default();
-        stats.processed = 1;
+        let mut stats = ProcessingStats {
+            processed: 1,
+            ..Default::default()
+        };
 
         // Mark as retrying
         item.status = DlqItemStatus::Retrying;

@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # Documentation site - development mode
+  docs-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: llm-cost-ops-docs-dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: npm run start -- --host 0.0.0.0
+    restart: unless-stopped
+
+  # Documentation site - production mode
+  docs-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: llm-cost-ops-docs-prod
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    labels:
+      - "com.docker.compose.project=llm-cost-ops-docs"
+      - "description=LLM Cost Ops Documentation"
+
+  # Link checker service
+  link-checker:
+    image: ghcr.io/lycheeverse/lychee:latest
+    container_name: llm-cost-ops-link-checker
+    depends_on:
+      - docs-prod
+    volumes:
+      - ./build:/docs
+    command:
+      - "--verbose"
+      - "--no-progress"
+      - "--exclude-all-private"
+      - "/docs/**/*.html"
+    profiles:
+      - testing

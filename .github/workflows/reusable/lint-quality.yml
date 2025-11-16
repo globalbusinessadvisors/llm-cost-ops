@@ -1,0 +1,372 @@
+name: Reusable Code Quality & Linting
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      lint-command:
+        required: false
+        type: string
+        default: ''
+        description: 'Custom lint command (overrides defaults)'
+      format-command:
+        required: false
+        type: string
+        default: ''
+        description: 'Custom format check command'
+      type-check-command:
+        required: false
+        type: string
+        default: ''
+        description: 'Custom type check command'
+
+jobs:
+  lint:
+    name: Lint & Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python Setup
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python lint tools
+        if: inputs.language == 'python'
+        run: |
+          pip install --upgrade pip
+          pip install ruff black isort mypy pylint bandit safety
+
+      - name: Run Ruff (Python linter)
+        if: inputs.language == 'python' && inputs.lint-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ruff check . --output-format=github
+
+      - name: Run Black (Python formatter check)
+        if: inputs.language == 'python' && inputs.format-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: black --check .
+
+      - name: Run isort (Python import sorting)
+        if: inputs.language == 'python' && inputs.format-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: isort --check-only .
+
+      - name: Run mypy (Python type checker)
+        if: inputs.language == 'python' && inputs.type-check-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: mypy . || true
+        continue-on-error: true
+
+      - name: Run Pylint (Python static analysis)
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: pylint **/*.py || true
+        continue-on-error: true
+
+      # TypeScript/JavaScript Setup
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: '${{ inputs.working-directory }}/package-lock.json'
+
+      - name: Install dependencies (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Run ESLint (TypeScript)
+        if: (inputs.language == 'typescript' || inputs.language == 'javascript') && inputs.lint-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run lint || npx eslint . --ext .ts,.tsx,.js,.jsx
+
+      - name: Run Prettier (TypeScript format check)
+        if: (inputs.language == 'typescript' || inputs.language == 'javascript') && inputs.format-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run format:check || npx prettier --check "**/*.{ts,tsx,js,jsx,json,md}"
+
+      - name: Run TypeScript compiler
+        if: inputs.language == 'typescript' && inputs.type-check-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: npx tsc --noEmit
+
+      # Go Setup
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Run golangci-lint
+        if: inputs.language == 'go' && inputs.lint-command == ''
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Run gofmt (Go formatter check)
+        if: inputs.language == 'go' && inputs.format-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "The following files are not formatted:"
+            gofmt -s -l .
+            exit 1
+          fi
+
+      - name: Run go vet (Go static analysis)
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: go vet ./...
+
+      - name: Run staticcheck (Go static analysis)
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+
+      # Java Setup
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Run Checkstyle (Java)
+        if: inputs.language == 'java' && inputs.lint-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew checkstyleMain checkstyleTest
+
+      - name: Run PMD (Java static analysis)
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew pmdMain pmdTest || true
+        continue-on-error: true
+
+      - name: Run SpotBugs (Java bug detection)
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew spotbugsMain spotbugsTest || true
+        continue-on-error: true
+
+      # Rust Setup
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt, clippy
+
+      - name: Run rustfmt (Rust formatter check)
+        if: inputs.language == 'rust' && inputs.format-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy (Rust linter)
+        if: inputs.language == 'rust' && inputs.lint-command == ''
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo clippy --all-targets --all-features -- -D warnings -W clippy::all
+
+      - name: Check documentation (Rust)
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+      # Custom commands
+      - name: Run custom lint command
+        if: inputs.lint-command != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.lint-command }}
+
+      - name: Run custom format command
+        if: inputs.format-command != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.format-command }}
+
+      - name: Run custom type check command
+        if: inputs.type-check-command != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.type-check-command }}
+
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python dependency audit
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run safety check (Python)
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install safety
+          safety check || true
+        continue-on-error: true
+
+      - name: Run pip-audit (Python)
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install pip-audit
+          pip-audit || true
+        continue-on-error: true
+
+      # TypeScript dependency audit
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run npm audit (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: npm audit --production || true
+        continue-on-error: true
+
+      # Go dependency audit
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Run govulncheck (Go)
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      # Java dependency audit
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Run dependency check (Java)
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew dependencyCheckAnalyze || true
+        continue-on-error: true
+
+      # Rust dependency audit
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Run cargo audit (Rust)
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo install cargo-audit || true
+          cargo audit
+
+      - name: Run cargo deny (Rust)
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo install cargo-deny || true
+          cargo deny check || true
+        continue-on-error: true
+
+  license-compliance:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python license check
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check licenses (Python)
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install pip-licenses
+          pip-licenses --format=json --with-urls --output-file=licenses.json
+          pip-licenses --fail-on="GPL;AGPL" || true
+        continue-on-error: true
+
+      # TypeScript license check
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check licenses (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npx license-checker --json --out licenses.json || true
+        continue-on-error: true
+
+      # Go license check
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Check licenses (Go)
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          go install github.com/google/go-licenses@latest
+          go-licenses report ./... --template licenses.tpl > licenses.txt || true
+        continue-on-error: true
+
+      # Rust license check
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Check licenses (Rust)
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo install cargo-license || true
+          cargo license --json > licenses.json || true
+        continue-on-error: true
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: licenses-${{ inputs.language }}
+          path: ${{ inputs.working-directory }}/licenses.*
+          retention-days: 90

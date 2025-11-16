@@ -192,7 +192,7 @@ impl CostCalculator {
             .iter()
             .find(|t| {
                 usage.total_tokens >= t.min_tokens
-                    && t.max_tokens.map_or(true, |max| usage.total_tokens <= max)
+                    && t.max_tokens.is_none_or(|max| usage.total_tokens <= max)
             })
             .ok_or_else(|| {
                 CostOpsError::InvalidPricingStructure(format!(
@@ -225,7 +225,7 @@ impl Default for CostCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{ModelIdentifier, IngestionSource};
+    use crate::domain::{ModelIdentifier, IngestionSource, Provider};
     use chrono::Utc;
     use rust_decimal_macros::dec;
 

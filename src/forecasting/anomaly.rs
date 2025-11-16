@@ -137,7 +137,7 @@ impl AnomalyDetector {
             AnomalyMethod::ModifiedZScore => self.detect_modified_zscore(data)?,
         };
 
-        let anomaly_rate = if data.len() > 0 {
+        let anomaly_rate = if !data.is_empty() {
             (anomalies.len() as f64 / data.len() as f64) * 100.0
         } else {
             0.0
@@ -318,7 +318,7 @@ impl AnomalyDetector {
 
         // Calculate median
         values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = if values.len() % 2 == 0 {
+        let median = if values.len().is_multiple_of(2) {
             (values[values.len() / 2 - 1] + values[values.len() / 2]) / 2.0
         } else {
             values[values.len() / 2]
@@ -331,7 +331,7 @@ impl AnomalyDetector {
             .collect();
 
         deviations.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let mad = if deviations.len() % 2 == 0 {
+        let mad = if deviations.len().is_multiple_of(2) {
             (deviations[deviations.len() / 2 - 1] + deviations[deviations.len() / 2]) / 2.0
         } else {
             deviations[deviations.len() / 2]
@@ -374,11 +374,11 @@ impl AnomalyDetector {
     fn calculate_severity(&self, score: f64, threshold: f64) -> AnomalySeverity {
         let ratio = score / threshold;
 
-        if ratio > 2.0 {
+        if ratio >= 2.0 {
             AnomalySeverity::Critical
-        } else if ratio > 1.5 {
+        } else if ratio >= 1.5 {
             AnomalySeverity::High
-        } else if ratio > 1.2 {
+        } else if ratio >= 1.2 {
             AnomalySeverity::Medium
         } else {
             AnomalySeverity::Low
@@ -422,8 +422,12 @@ mod tests {
     fn test_zscore_detection() {
         let detector = AnomalyDetector::with_defaults();
 
-        // Data with one clear outlier
-        let data = create_test_series(vec![10, 12, 11, 13, 100, 12, 11, 10, 12, 11]);
+        // Data with clear outliers - more data points help z-score detection
+        // Normal range around 10-13, then a spike at 100
+        let data = create_test_series(vec![
+            10, 12, 11, 13, 10, 12, 11, 13, 10, 12,  // 10 normal points
+            11, 13, 10, 12, 100, 11, 13, 10, 12, 11, // outlier at index 14
+        ]);
 
         let result = detector.detect(&data).unwrap();
 

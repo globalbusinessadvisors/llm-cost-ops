@@ -1,0 +1,378 @@
+# Docker Compose Override - Local Development Customizations
+# Version: 1.0.0
+# Description: Local development overrides and customizations
+# This file is automatically merged with docker-compose.yml when running docker-compose
+
+version: '3.8'
+
+# ============================================================================
+# SERVICES OVERRIDES
+# ============================================================================
+services:
+  # ==========================================================================
+  # APPLICATION OVERRIDES
+  # ==========================================================================
+  app:
+    # Enable hot-reload for local development
+    volumes:
+      - ./src:/app/src:cached
+      - ./migrations:/app/migrations:cached
+      - ./migrations_postgres:/app/migrations_postgres:cached
+      - ./config.toml:/app/config.toml:cached
+      - app-data:/app/data
+      - ./logs:/app/logs
+      # Cache cargo dependencies for faster builds
+      - cargo-cache:/usr/local/cargo/registry
+      - cargo-git-cache:/usr/local/cargo/git
+      - target-cache:/app/target
+
+    # Override command to use cargo-watch for hot-reload
+    command: cargo watch -x 'run --bin cost-ops'
+
+    environment:
+      # Enhanced logging for development
+      RUST_LOG: debug,sqlx=info,hyper=info
+      RUST_BACKTRACE: full
+
+      # Development-specific settings
+      ENABLE_DEBUG_ENDPOINTS: true
+      ENABLE_QUERY_LOGGING: true
+      ENABLE_DETAILED_ERRORS: true
+
+      # Disable rate limiting for easier testing
+      ENABLE_RATE_LIMITING: false
+
+      # Allow all CORS origins in development
+      CORS_ALLOWED_ORIGINS: "*"
+
+      # Development ports (avoid conflicts)
+      PORT: 8080
+      METRICS_PORT: 9090
+
+    # Expose additional debug ports
+    ports:
+      - "8080:8080"      # HTTP API
+      - "9090:9090"      # Metrics
+      - "5555:5555"      # Debug/profiling port
+
+    # Reduce resource limits for local development
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==========================================================================
+  # POSTGRESQL OVERRIDES
+  # ==========================================================================
+  postgres:
+    # Expose port for direct database access
+    ports:
+      - "5432:5432"
+
+    # Add pgAdmin-friendly configuration
+    environment:
+      # Enable query logging for development
+      POSTGRES_LOG_STATEMENT: all
+      POSTGRES_LOG_DURATION: on
+      POSTGRES_LOG_MIN_DURATION_STATEMENT: 0
+
+    # Mount SQL scripts for quick testing
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./scripts/sql:/scripts:ro
+
+  # ==========================================================================
+  # REDIS OVERRIDES
+  # ==========================================================================
+  redis:
+    # Expose port for direct access
+    ports:
+      - "6379:6379"
+
+    # Enable Redis CLI logging
+    command: redis-server --loglevel debug
+
+  # ==========================================================================
+  # NATS OVERRIDES
+  # ==========================================================================
+  nats:
+    # Expose all ports for debugging
+    ports:
+      - "4222:4222"      # Client connections
+      - "8222:8222"      # HTTP monitoring
+      - "6222:6222"      # Cluster connections
+
+    # Enable verbose logging
+    command: ["-c", "/etc/nats/nats.conf", "-DV"]
+
+  # ==========================================================================
+  # PROMETHEUS OVERRIDES
+  # ==========================================================================
+  prometheus:
+    # Expose Prometheus UI
+    ports:
+      - "9091:9090"
+
+    # Shorter retention for development
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+      - '--storage.tsdb.retention.size=5GB'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+  # ==========================================================================
+  # GRAFANA OVERRIDES
+  # ==========================================================================
+  grafana:
+    # Expose Grafana UI
+    ports:
+      - "3000:3000"
+
+    environment:
+      # Development-friendly settings
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: true
+      GF_LOG_LEVEL: debug
+
+  # ==========================================================================
+  # JAEGER OVERRIDES
+  # ==========================================================================
+  jaeger:
+    # Expose Jaeger UI and ports
+    ports:
+      - "16686:16686"    # Jaeger UI
+      - "14268:14268"    # HTTP collector
+      - "6831:6831/udp"  # Jaeger compact thrift
+
+    environment:
+      # Sample all traces in development
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
+      LOG_LEVEL: debug
+
+  # ==========================================================================
+  # MAILHOG OVERRIDES
+  # ==========================================================================
+  mailhog:
+    # Expose all ports
+    ports:
+      - "1025:1025"      # SMTP
+      - "8025:8025"      # Web UI
+
+  # ==========================================================================
+  # PGADMIN OVERRIDES
+  # ==========================================================================
+  pgadmin:
+    # Expose pgAdmin UI
+    ports:
+      - "5050:80"
+
+    environment:
+      # Auto-login in development
+      PGADMIN_DEFAULT_EMAIL: admin@llm-cost-ops.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+
+  # ==========================================================================
+  # REDIS COMMANDER OVERRIDES
+  # ==========================================================================
+  redis-commander:
+    # Expose Redis Commander UI
+    ports:
+      - "8081:8081"
+
+  # ==========================================================================
+  # DOCUMENTATION GENERATOR
+  # ==========================================================================
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-docs
+    hostname: docs
+    restart: unless-stopped
+
+    networks:
+      - llm-cost-ops-network
+
+    volumes:
+      - ./:/app
+      - target-cache:/app/target
+
+    ports:
+      - "8000:8000"
+
+    command: >
+      sh -c "
+        cargo doc --no-deps --all-features --document-private-items &&
+        echo 'Documentation generated. Serving at http://localhost:8000' &&
+        python3 -m http.server 8000 --directory /app/target/doc
+      "
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+    labels:
+      com.llm-cost-ops.service: "documentation"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # SQL CLIENT (for database management)
+  # ==========================================================================
+  sql-client:
+    image: postgres:16-alpine
+    container_name: llm-cost-ops-sql-client
+    hostname: sql-client
+    restart: "no"
+
+    networks:
+      - llm-cost-ops-network
+
+    volumes:
+      - ./scripts/sql:/scripts:ro
+
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: llm_cost_ops_dev
+
+    command: ["tail", "-f", "/dev/null"]
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+    labels:
+      com.llm-cost-ops.service: "sql-client"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # REDIS CLI (for cache management)
+  # ==========================================================================
+  redis-cli:
+    image: redis:7-alpine
+    container_name: llm-cost-ops-redis-cli
+    hostname: redis-cli
+    restart: "no"
+
+    networks:
+      - llm-cost-ops-network
+
+    command: ["tail", "-f", "/dev/null"]
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+    labels:
+      com.llm-cost-ops.service: "redis-cli"
+      com.llm-cost-ops.environment: "development"
+
+  # ==========================================================================
+  # DEVELOPMENT SHELL (with all tools)
+  # ==========================================================================
+  dev-shell:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: llm-cost-ops-dev-shell
+    hostname: dev-shell
+    restart: "no"
+
+    networks:
+      - llm-cost-ops-network
+      - monitoring-network
+
+    volumes:
+      - ./:/app
+      - cargo-cache:/usr/local/cargo/registry
+      - cargo-git-cache:/usr/local/cargo/git
+      - target-cache:/app/target
+
+    environment:
+      RUST_LOG: debug
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/llm_cost_ops_dev
+      REDIS_URL: redis://redis:6379/0
+      NATS_URL: nats://nats:4222
+
+    command: ["bash"]
+
+    stdin_open: true
+    tty: true
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    labels:
+      com.llm-cost-ops.service: "dev-shell"
+      com.llm-cost-ops.environment: "development"
+
+# ============================================================================
+# ADDITIONAL VOLUMES FOR LOCAL DEVELOPMENT
+# ============================================================================
+volumes:
+  # Cargo cache volumes for faster builds
+  cargo-cache:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Cargo registry cache"
+      com.llm-cost-ops.environment: "development"
+
+  cargo-git-cache:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Cargo git cache"
+      com.llm-cost-ops.environment: "development"
+
+  target-cache:
+    driver: local
+    labels:
+      com.llm-cost-ops.description: "Cargo build target cache"
+      com.llm-cost-ops.environment: "development"

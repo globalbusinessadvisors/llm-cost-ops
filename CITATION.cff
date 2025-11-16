@@ -1,0 +1,35 @@
+# CITATION.cff
+#
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: LLM-CostOps
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: LLM-CostOps
+    name: Contributors
+    email: contact@example.com
+repository-code: 'https://github.com/yourusername/llm-cost-ops'
+url: 'https://example.com/llm-cost-ops'
+abstract: >-
+  Enterprise-grade cost operations platform for LLM
+  infrastructure. Track, analyze, and optimize costs across
+  multiple LLM providers with production-ready accuracy.
+keywords:
+  - LLM
+  - cost optimization
+  - cost tracking
+  - AI operations
+  - MLOps
+  - FinOps
+  - OpenAI
+  - Anthropic
+  - forecasting
+  - cost analysis
+license: Apache-2.0 OR MIT
+version: 0.2.0
+date-released: '2025-01-15'

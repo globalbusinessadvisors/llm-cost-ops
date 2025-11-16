@@ -148,11 +148,8 @@ pub fn permission_checker(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::{
-        api_key::ApiKey,
-        jwt::JwtClaims,
-        rbac::{Role, RoleType},
-    };
+    use crate::auth::rbac::Role;
+    use crate::auth::jwt::{JwtClaims, TokenType};
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -180,28 +177,7 @@ mod tests {
 
         let app = Router::new()
             .route("/test", get(test_handler))
-            .layer(Extension(rbac_state))
-            .layer(middleware::from_fn(|req: Request, next: Next| async move {
-                // Inject auth context
-                let mut req = req;
-                let claims = JwtClaims {
-                    sub: "test_user".to_string(),
-                    exp: 0,
-                    iat: 0,
-                    organization_id: Some("test_org".to_string()),
-                };
-                let auth_context = AuthContext {
-                    organization_id: "test_org".to_string(),
-                    subject: "test_user".to_string(),
-                    auth_method: crate::auth::AuthMethod::Jwt,
-                    permissions: vec![],
-                    jwt_claims: Some(claims),
-                    api_key: None,
-                };
-                req.extensions_mut().insert(auth_context);
-                next.run(req).await
-            }))
-            .layer(middleware::from_fn(move |req: Request, next: Next| {
+            .layer(middleware::from_fn(move |req: Request<Body>, next: Next| {
                 let permission = Permission::new(Resource::Usage, Action::Read);
                 async move {
                     let rbac_state = req.extensions().get::<RbacState>().unwrap().clone();
@@ -215,7 +191,34 @@ mod tests {
                     )
                     .await
                 }
-            }));
+            }))
+            .layer(middleware::from_fn(|req: Request<Body>, next: Next| async move {
+                // Inject auth context
+                let mut req = req;
+                let claims = JwtClaims {
+                    sub: "test_user".to_string(),
+                    exp: 0,
+                    iat: 0,
+                    org: "test_org".to_string(),
+                    iss: "test".to_string(),
+                    aud: "test".to_string(),
+                    nbf: 0,
+                    jti: "test".to_string(),
+                    token_type: TokenType::Access,
+                    permissions: vec![],
+                };
+                let auth_context = AuthContext {
+                    organization_id: "test_org".to_string(),
+                    subject: "test_user".to_string(),
+                    auth_method: crate::auth::AuthMethod::Jwt,
+                    permissions: vec![],
+                    jwt_claims: Some(claims),
+                    api_key: None,
+                };
+                req.extensions_mut().insert(auth_context);
+                next.run(req).await
+            }))
+            .layer(Extension(rbac_state));
 
         let response = app
             .oneshot(Request::builder().uri("/test").body(Body::empty()).unwrap())
@@ -234,27 +237,7 @@ mod tests {
 
         let app = Router::new()
             .route("/test", get(test_handler))
-            .layer(Extension(rbac_state))
-            .layer(middleware::from_fn(|req: Request, next: Next| async move {
-                let mut req = req;
-                let claims = JwtClaims {
-                    sub: "test_user".to_string(),
-                    exp: 0,
-                    iat: 0,
-                    organization_id: Some("test_org".to_string()),
-                };
-                let auth_context = AuthContext {
-                    organization_id: "test_org".to_string(),
-                    subject: "test_user".to_string(),
-                    auth_method: crate::auth::AuthMethod::Jwt,
-                    permissions: vec![],
-                    jwt_claims: Some(claims),
-                    api_key: None,
-                };
-                req.extensions_mut().insert(auth_context);
-                next.run(req).await
-            }))
-            .layer(middleware::from_fn(move |req: Request, next: Next| {
+            .layer(middleware::from_fn(move |req: Request<Body>, next: Next| {
                 let permission = Permission::new(Resource::Usage, Action::Delete);
                 async move {
                     let rbac_state = req.extensions().get::<RbacState>().unwrap().clone();
@@ -268,7 +251,33 @@ mod tests {
                     )
                     .await
                 }
-            }));
+            }))
+            .layer(middleware::from_fn(|req: Request<Body>, next: Next| async move {
+                let mut req = req;
+                let claims = JwtClaims {
+                    sub: "test_user".to_string(),
+                    exp: 0,
+                    iat: 0,
+                    org: "test_org".to_string(),
+                    iss: "test".to_string(),
+                    aud: "test".to_string(),
+                    nbf: 0,
+                    jti: "test".to_string(),
+                    token_type: TokenType::Access,
+                    permissions: vec![],
+                };
+                let auth_context = AuthContext {
+                    organization_id: "test_org".to_string(),
+                    subject: "test_user".to_string(),
+                    auth_method: crate::auth::AuthMethod::Jwt,
+                    permissions: vec![],
+                    jwt_claims: Some(claims),
+                    api_key: None,
+                };
+                req.extensions_mut().insert(auth_context);
+                next.run(req).await
+            }))
+            .layer(Extension(rbac_state));
 
         let response = app
             .oneshot(Request::builder().uri("/test").body(Body::empty()).unwrap())

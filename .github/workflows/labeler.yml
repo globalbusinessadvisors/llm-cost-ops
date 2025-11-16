@@ -1,0 +1,120 @@
+name: "Auto Labeler"
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  label-pr:
+    name: Label Pull Request
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target'
+    steps:
+      - uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          sync-labels: true
+
+  label-size:
+    name: Label PR Size
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target'
+    steps:
+      - uses: codelytv/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/xs'
+          xs_max_size: '10'
+          s_label: 'size/s'
+          s_max_size: '100'
+          m_label: 'size/m'
+          m_max_size: '500'
+          l_label: 'size/l'
+          l_max_size: '1000'
+          xl_label: 'size/xl'
+          message_if_xl: >
+            This PR is very large. Consider breaking it into smaller PRs for easier review.
+
+  label-issue:
+    name: Label Issue
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues'
+    steps:
+      - name: Auto-label based on title
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const labels = [];
+
+            // Add labels based on title keywords
+            if (title.includes('[bug]') || title.includes('bug:')) {
+              labels.push('bug');
+            }
+            if (title.includes('[feature]') || title.includes('feature:')) {
+              labels.push('enhancement');
+            }
+            if (title.includes('[docs]') || title.includes('documentation')) {
+              labels.push('documentation');
+            }
+            if (title.includes('[performance]') || title.includes('perf:')) {
+              labels.push('performance');
+            }
+
+            // Add component labels
+            if (title.includes('api')) labels.push('api');
+            if (title.includes('cli')) labels.push('cli');
+            if (title.includes('database') || title.includes('storage')) labels.push('storage');
+            if (title.includes('k8s') || title.includes('kubernetes')) labels.push('k8s');
+            if (title.includes('auth')) labels.push('auth');
+            if (title.includes('forecast')) labels.push('forecasting');
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }
+
+  first-contribution:
+    name: First Contribution Welcome
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' || github.event_name == 'issues'
+    steps:
+      - uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          issue-message: |
+            Welcome to LLM-CostOps! 👋
+
+            Thank you for creating your first issue. A maintainer will review it soon.
+
+            In the meantime, please make sure you've provided all the requested information in the issue template.
+            This helps us understand and address your issue more quickly.
+
+            If you're interested in contributing, check out our [Contributing Guide](https://github.com/${{ github.repository }}/blob/main/CONTRIBUTING.md).
+
+          pr-message: |
+            Welcome to LLM-CostOps! 👋
+
+            Thank you for your first contribution! A maintainer will review your pull request soon.
+
+            Please make sure you've:
+            - ✅ Filled out the pull request template completely
+            - ✅ Run `cargo fmt` and `cargo clippy`
+            - ✅ Added tests for new functionality
+            - ✅ Updated documentation if needed
+
+            If you have any questions, feel free to ask in the comments or join our [Discord](https://discord.gg/example).

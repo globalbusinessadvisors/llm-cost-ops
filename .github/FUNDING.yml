@@ -1,0 +1,14 @@
+# Funding Configuration
+#
+# These are supported funding model platforms
+
+github: # GitHub Sponsors username(s)
+  - llm-cost-ops
+
+patreon: # Patreon username
+open_collective: llm-cost-ops # Open Collective username
+
+# Other platforms
+ko_fi: # Ko-fi username
+custom: # Custom funding URL
+  - https://example.com/sponsor

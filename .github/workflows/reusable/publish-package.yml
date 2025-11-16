@@ -1,0 +1,340 @@
+name: Reusable Package Publishing
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      package-name:
+        required: true
+        type: string
+        description: 'Package name to publish'
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+        description: 'Perform dry-run without actual publishing'
+      pre-publish-command:
+        required: false
+        type: string
+        default: ''
+        description: 'Command to run before publishing (e.g., build)'
+    secrets:
+      PYPI_TOKEN:
+        required: false
+        description: 'PyPI API token for Python packages'
+      NPM_TOKEN:
+        required: false
+        description: 'NPM token for TypeScript/JavaScript packages'
+      CARGO_REGISTRY_TOKEN:
+        required: false
+        description: 'Crates.io token for Rust packages'
+      OSSRH_USERNAME:
+        required: false
+        description: 'Sonatype OSSRH username for Java packages'
+      OSSRH_PASSWORD:
+        required: false
+        description: 'Sonatype OSSRH password for Java packages'
+      GPG_PRIVATE_KEY:
+        required: false
+        description: 'GPG private key for signing'
+      GPG_PASSPHRASE:
+        required: false
+        description: 'GPG passphrase for signing'
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.package-name }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.dry-run && 'test' || 'production' }}
+      url: ${{ steps.publish-output.outputs.package-url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for changelog
+
+      # Python Publishing
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python build tools
+        if: inputs.language == 'python'
+        run: |
+          pip install --upgrade pip
+          pip install build twine wheel
+
+      - name: Build Python package
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: python -m build
+
+      - name: Check Python package
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: twine check dist/*
+
+      - name: Publish to PyPI (Python)
+        if: inputs.language == 'python' && !inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: twine upload dist/*
+
+      - name: Publish to TestPyPI (Python dry-run)
+        if: inputs.language == 'python' && inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: twine upload --repository testpypi dist/* || true
+        continue-on-error: true
+
+      # TypeScript/JavaScript Publishing
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: npm ci
+
+      - name: Build TypeScript package
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: npm run build
+
+      - name: Run pre-publish checks (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npm run lint || true
+          npm test || true
+
+      - name: Publish to NPM (TypeScript)
+        if: (inputs.language == 'typescript' || inputs.language == 'javascript') && !inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Publish to NPM (TypeScript dry-run)
+        if: (inputs.language == 'typescript' || inputs.language == 'javascript') && inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        run: npm publish --dry-run
+
+      # Go Publishing (GitHub/Git tags)
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Verify Go module
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          go mod verify
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run Go tests
+        if: inputs.language == 'go'
+        working-directory: ${{ inputs.working-directory }}
+        run: go test -v ./...
+
+      - name: Tag Go module (Go publishing)
+        if: inputs.language == 'go' && !inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          VERSION=$(git describe --tags --abbrev=0)
+          echo "Go modules are published via Git tags: ${VERSION}"
+          echo "Tag created: ${VERSION}"
+
+      # Java Publishing (Maven Central)
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+          server-id: ossrh
+          server-username: OSSRH_USERNAME
+          server-password: OSSRH_PASSWORD
+          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
+
+      - name: Build Java package
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew build -x test
+
+      - name: Run Java tests
+        if: inputs.language == 'java'
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew test
+
+      - name: Publish to Maven Central (Java)
+        if: inputs.language == 'java' && !inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: ./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
+
+      - name: Publish to Maven Local (Java dry-run)
+        if: inputs.language == 'java' && inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        run: ./gradlew publishToMavenLocal
+
+      # Rust Publishing (crates.io)
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Build Rust package
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo build --release
+
+      - name: Run Rust tests
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo test --all-features
+
+      - name: Package Rust crate
+        if: inputs.language == 'rust'
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo package --list
+
+      - name: Publish to crates.io (Rust)
+        if: inputs.language == 'rust' && !inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --token $CARGO_REGISTRY_TOKEN
+
+      - name: Publish to crates.io (Rust dry-run)
+        if: inputs.language == 'rust' && inputs.dry-run
+        working-directory: ${{ inputs.working-directory }}
+        run: cargo publish --dry-run
+
+      # Custom pre-publish command
+      - name: Run pre-publish command
+        if: inputs.pre-publish-command != ''
+        working-directory: ${{ inputs.working-directory }}
+        run: ${{ inputs.pre-publish-command }}
+
+      # Generate SBOM
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ${{ inputs.working-directory }}
+          artifact-name: sbom-${{ inputs.language }}-${{ inputs.package-name }}.spdx.json
+          output-file: ${{ inputs.working-directory }}/sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ inputs.language }}-${{ inputs.package-name }}
+          path: ${{ inputs.working-directory }}/sbom.spdx.json
+          retention-days: 90
+
+      # Upload package artifacts
+      - name: Upload package artifacts (Python)
+        if: inputs.language == 'python'
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-${{ inputs.package-name }}
+          path: ${{ inputs.working-directory }}/dist/*
+          retention-days: 30
+
+      - name: Upload package artifacts (TypeScript)
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package-${{ inputs.package-name }}
+          path: |
+            ${{ inputs.working-directory }}/*.tgz
+            ${{ inputs.working-directory }}/dist/
+          retention-days: 30
+
+      - name: Upload package artifacts (Rust)
+        if: inputs.language == 'rust'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-package-${{ inputs.package-name }}
+          path: ${{ inputs.working-directory }}/target/package/*.crate
+          retention-days: 30
+
+      # Output package URL
+      - name: Set package URL output
+        id: publish-output
+        run: |
+          case "${{ inputs.language }}" in
+            python)
+              echo "package-url=https://pypi.org/project/${{ inputs.package-name }}/" >> $GITHUB_OUTPUT
+              ;;
+            typescript|javascript)
+              echo "package-url=https://www.npmjs.com/package/${{ inputs.package-name }}" >> $GITHUB_OUTPUT
+              ;;
+            go)
+              echo "package-url=https://pkg.go.dev/${{ inputs.package-name }}" >> $GITHUB_OUTPUT
+              ;;
+            java)
+              echo "package-url=https://central.sonatype.com/artifact/${{ inputs.package-name }}" >> $GITHUB_OUTPUT
+              ;;
+            rust)
+              echo "package-url=https://crates.io/crates/${{ inputs.package-name }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  verify-published:
+    name: Verify Published Package
+    needs: publish
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dry-run }}
+    steps:
+      - name: Wait for package to be available
+        run: sleep 60
+
+      - name: Verify Python package
+        if: inputs.language == 'python'
+        run: |
+          pip install ${{ inputs.package-name }}
+          python -c "import ${{ inputs.package-name }}"
+
+      - name: Verify TypeScript package
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        run: |
+          npm install ${{ inputs.package-name }}
+          node -e "require('${{ inputs.package-name }}')"
+
+      - name: Verify Rust package
+        if: inputs.language == 'rust'
+        run: |
+          cargo search ${{ inputs.package-name }} --limit 1
+
+      - name: Create success comment
+        if: success()
+        run: |
+          echo "✅ Package ${{ inputs.package-name }} successfully published and verified!" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,472 @@
+# Production environment values
+# This file overrides values.yaml for production deployments
+
+# Multiple replicas for high availability
+replicaCount: 3
+
+# Production image settings
+image:
+  pullPolicy: IfNotPresent
+  tag: "v0.1.0"
+
+# Pod annotations for production
+podAnnotations:
+  environment: "production"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+# Pod labels for production
+podLabels:
+  environment: production
+  tier: backend
+
+# Production resources - higher allocations
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Enable autoscaling in production
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 75
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+
+# Enable Pod Disruption Budget with minimum available
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Production ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "500"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/enable-modsecurity: "true"
+    nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
+  hosts:
+    - host: llm-cost-ops.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: llm-cost-ops-prod-tls
+      hosts:
+        - llm-cost-ops.example.com
+
+# Application configuration for production
+config:
+  # API configuration
+  api:
+    enableCors: false  # Disable permissive CORS in production
+    enableLogging: true
+    requestTimeoutSecs: 30
+    maxRequestBodySize: 10485760
+    enableCompression: true
+    compressionLevel: 6
+
+  # Database configuration - PostgreSQL with SSL
+  database:
+    type: "postgres"
+    host: "llm-cost-ops-postgres"
+    port: 5432
+    name: "llm_cost_ops"
+    user: "postgres"
+    existingSecret: "llm-cost-ops-db-secret"
+    existingSecretPasswordKey: "password"
+    poolSize: 20
+    maxLifetime: 1800
+    connectionTimeout: 30
+    sslMode: "require"
+
+  # Logging configuration - structured JSON logging
+  logging:
+    level: "info"
+    format: "json"
+    color: false
+    enableFile: true
+    filePath: "/var/log/llm-cost-ops/app.log"
+    fileRotation:
+      enabled: true
+      maxSize: "100MB"
+      maxAge: 7
+      maxBackups: 10
+
+  # Metrics configuration
+  metrics:
+    enabled: true
+    port: 9090
+    enableProcess: true
+    enableRuntime: true
+    labels:
+      environment: production
+      service: llm-cost-ops
+
+  # Tracing configuration
+  tracing:
+    enabled: true
+    backend: "otlp"
+    otlp:
+      endpoint: "http://otel-collector:4317"
+      protocol: "grpc"
+    samplingRate: 0.1  # Sample 10% in production
+
+  # Authentication - strict settings
+  auth:
+    enabled: true
+    jwt:
+      existingSecret: "llm-cost-ops-jwt-secret"
+      existingSecretKey: "jwt-secret"
+      expirationSecs: 3600  # 1 hour
+      refreshExpirationSecs: 604800  # 7 days
+      issuer: "llm-cost-ops"
+      audience: "llm-cost-ops-api"
+    apiKey:
+      enabled: true
+      headerName: "X-API-Key"
+    rbac:
+      enabled: true
+      defaultRole: "viewer"
+
+  # Rate limiting - strict production limits
+  rateLimit:
+    enabled: true
+    requestsPerSec: 500
+    burstSize: 1000
+    storage: "redis"
+    redis:
+      url: "redis://llm-cost-ops-redis:6379"
+      keyPrefix: "ratelimit:"
+      ttl: 60
+
+  # Ingestion configuration
+  ingestion:
+    enabled: true
+    batchSize: 1000
+    flushInterval: 60
+    enableValidation: true
+    maxPayloadSize: 10485760
+
+  # Streaming - enabled in production
+  streaming:
+    enabled: true
+    backend: "nats"
+    nats:
+      url: "nats://llm-cost-ops-nats:4222"
+      cluster: "llm-cost-ops"
+      clientId: "llm-cost-ops-prod"
+      subject: "llm.costs"
+      durableName: "cost-consumer"
+      maxInflight: 1000
+
+  # DLQ configuration
+  dlq:
+    enabled: true
+    maxRetries: 3
+    retryDelay: 60
+    storage: "database"
+
+  # Export configuration
+  export:
+    enabled: true
+    directory: "/data/exports"
+    maxSizeMB: 100
+    scheduling:
+      enabled: true
+      timezone: "UTC"
+    email:
+      enabled: true
+      smtp:
+        host: "smtp.example.com"
+        port: 587
+        user: "noreply@example.com"
+        existingSecret: "llm-cost-ops-smtp-secret"
+        existingSecretPasswordKey: "smtp-password"
+        from: "noreply@example.com"
+        useTLS: true
+
+  # Forecasting configuration
+  forecasting:
+    enabled: true
+    windowDays: 30
+    anomalyDetection: true
+    anomalyThreshold: 3.0
+
+  # Budget alerts - enabled in production
+  budgetAlerts:
+    enabled: true
+    checkInterval: 3600
+    thresholds:
+      - 50
+      - 75
+      - 90
+      - 100
+
+  # Compression configuration
+  compression:
+    enabled: true
+    algorithm: "brotli"
+    level: 6
+    minSize: 1024
+
+# Environment variables for production
+env:
+  - name: ENVIRONMENT
+    value: "production"
+  - name: RUST_LOG
+    value: "info,sqlx=warn,tower_http=warn"
+  - name: RUST_BACKTRACE
+    value: "0"
+
+# Persistence - enabled with fast storage class
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  size: 50Gi
+  accessModes:
+    - ReadWriteOnce
+
+# PostgreSQL configuration - production settings
+postgresql:
+  enabled: true
+  auth:
+    username: postgres
+    existingSecret: "llm-cost-ops-db-secret"
+    database: llm_cost_ops
+  primary:
+    persistence:
+      enabled: true
+      storageClass: "fast-ssd"
+      size: 100Gi
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+      fsGroup: 999
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      runAsNonRoot: true
+      runAsUser: 999
+
+# Redis configuration - production settings
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    existingSecret: "llm-cost-ops-redis-secret"
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  persistence:
+    enabled: true
+    storageClass: "fast-ssd"
+    size: 10Gi
+
+# NATS configuration - production settings
+nats:
+  enabled: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  jetstream:
+    enabled: true
+    storage:
+      size: 50Gi
+      storageClass: "fast-ssd"
+
+# ServiceMonitor configuration
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels:
+    environment: production
+    prometheus: kube-prometheus
+
+# Network Policy - strict production policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: ingress-nginx
+      ports:
+      - protocol: TCP
+        port: 8080
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+      ports:
+      - protocol: TCP
+        port: 9090
+  egress:
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: postgresql
+      ports:
+      - protocol: TCP
+        port: 5432
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: redis
+      ports:
+      - protocol: TCP
+        port: 6379
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: nats
+      ports:
+      - protocol: TCP
+        port: 4222
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: kube-system
+      ports:
+      - protocol: UDP
+        port: 53
+
+# Priority class for production
+priorityClassName: "high-priority"
+
+# Node selector - use production nodes
+nodeSelector:
+  workload-type: production
+
+# Tolerations for production nodes
+tolerations:
+  - key: "workload-type"
+    operator: "Equal"
+    value: "production"
+    effect: "NoSchedule"
+
+# Affinity for high availability and performance
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - llm-cost-ops
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - compute-optimized
+
+# Topology spread constraints for even distribution
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: llm-cost-ops
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: llm-cost-ops
+
+# Probes - production settings
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 30
+
+# Jobs configuration
+jobs:
+  migration:
+    enabled: true
+    backoffLimit: 3
+    ttlSecondsAfterFinished: 86400  # Keep for 24 hours
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 256Mi

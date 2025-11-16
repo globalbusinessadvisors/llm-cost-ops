@@ -1,0 +1,337 @@
+name: Reusable Documentation Deployment
+
+on:
+  workflow_call:
+    inputs:
+      language:
+        required: true
+        type: string
+        description: 'Language: python, typescript, go, java, rust'
+      working-directory:
+        required: false
+        type: string
+        default: '.'
+        description: 'Working directory for the SDK'
+      docs-directory:
+        required: false
+        type: string
+        default: 'docs'
+        description: 'Documentation source directory'
+      deploy-target:
+        required: false
+        type: string
+        default: 'github-pages'
+        description: 'Deployment target: github-pages, netlify, vercel, s3'
+      base-url:
+        required: false
+        type: string
+        default: ''
+        description: 'Base URL for documentation'
+      generate-api-docs:
+        required: false
+        type: boolean
+        default: true
+        description: 'Generate API documentation from code'
+    secrets:
+      NETLIFY_AUTH_TOKEN:
+        required: false
+        description: 'Netlify authentication token'
+      NETLIFY_SITE_ID:
+        required: false
+        description: 'Netlify site ID'
+      VERCEL_TOKEN:
+        required: false
+        description: 'Vercel token'
+      AWS_ACCESS_KEY_ID:
+        required: false
+        description: 'AWS access key for S3'
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+        description: 'AWS secret key for S3'
+    outputs:
+      docs-url:
+        description: 'URL where documentation is deployed'
+        value: ${{ jobs.deploy.outputs.docs-url }}
+
+jobs:
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.build.outputs.artifact-name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Python documentation (Sphinx, MkDocs)
+      - name: Setup Python
+        if: inputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python doc tools
+        if: inputs.language == 'python'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          pip install --upgrade pip
+          pip install sphinx sphinx-rtd-theme sphinx-autodoc-typehints
+          pip install mkdocs mkdocs-material mkdocstrings[python]
+          pip install -e ".[dev]" || pip install -e "." || true
+
+      - name: Generate Python API docs
+        if: inputs.language == 'python' && inputs.generate-api-docs
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Try Sphinx first
+          if [ -f "docs/conf.py" ]; then
+            cd docs && sphinx-apidoc -o api .. && sphinx-build -b html . _build
+          # Try MkDocs
+          elif [ -f "mkdocs.yml" ]; then
+            mkdocs build
+          else
+            # Generate basic Sphinx docs
+            mkdir -p docs
+            sphinx-quickstart -q -p "SDK" -a "Team" -v "1.0" docs
+            cd docs && sphinx-apidoc -o api .. && sphinx-build -b html . _build
+          fi
+
+      # TypeScript documentation (TypeDoc, JSDoc)
+      - name: Setup Node.js
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install TypeScript doc tools
+        if: inputs.language == 'typescript' || inputs.language == 'javascript'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          npm ci
+          npm install --save-dev typedoc typedoc-plugin-markdown
+          npm install --save-dev jsdoc jsdoc-to-markdown
+
+      - name: Generate TypeScript API docs
+        if: (inputs.language == 'typescript' || inputs.language == 'javascript') && inputs.generate-api-docs
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Try TypeDoc
+          if [ -f "tsconfig.json" ]; then
+            npx typedoc --out docs/api src
+          # Try JSDoc
+          elif [ -f "jsdoc.json" ] || [ -f ".jsdoc.json" ]; then
+            npx jsdoc -c jsdoc.json -d docs/api || npx jsdoc -c .jsdoc.json -d docs/api
+          else
+            # Generate basic TypeDoc
+            npx typedoc --out docs/api src --entryPointStrategy expand
+          fi
+
+      # Go documentation (godoc, pkgsite)
+      - name: Setup Go
+        if: inputs.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Generate Go API docs
+        if: inputs.language == 'go' && inputs.generate-api-docs
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # Install godoc
+          go install golang.org/x/tools/cmd/godoc@latest
+
+          # Generate documentation
+          mkdir -p docs/api
+
+          # Create a simple HTML wrapper
+          cat > docs/api/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Go SDK Documentation</title>
+              <meta http-equiv="refresh" content="0; url=https://pkg.go.dev/${{ github.repository }}" />
+          </head>
+          <body>
+              <p>Redirecting to <a href="https://pkg.go.dev/${{ github.repository }}">pkg.go.dev</a>...</p>
+          </body>
+          </html>
+          EOF
+
+      # Rust documentation (rustdoc)
+      - name: Setup Rust
+        if: inputs.language == 'rust'
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Generate Rust API docs
+        if: inputs.language == 'rust' && inputs.generate-api-docs
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          cargo doc --no-deps --all-features --document-private-items
+          # Copy docs to standard location
+          mkdir -p docs/api
+          cp -r target/doc/* docs/api/
+
+      # Java documentation (Javadoc)
+      - name: Setup Java
+        if: inputs.language == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Generate Java API docs
+        if: inputs.language == 'java' && inputs.generate-api-docs
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          # For Gradle
+          if [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+            ./gradlew javadoc
+            mkdir -p docs/api
+            cp -r build/docs/javadoc/* docs/api/
+          # For Maven
+          elif [ -f "pom.xml" ]; then
+            ./mvnw javadoc:javadoc
+            mkdir -p docs/api
+            cp -r target/site/apidocs/* docs/api/
+          fi
+
+      # Build static site (if using static site generator)
+      - name: Build with Jekyll
+        if: hashFiles(format('{0}/_config.yml', inputs.docs-directory)) != ''
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ${{ inputs.docs-directory }}
+          destination: ./_site
+
+      - name: Build with Hugo
+        if: hashFiles(format('{0}/config.toml', inputs.docs-directory)) != ''
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
+
+      - name: Build Hugo site
+        if: hashFiles(format('{0}/config.toml', inputs.docs-directory)) != ''
+        working-directory: ${{ inputs.docs-directory }}
+        run: hugo --minify
+
+      # Set artifact name
+      - name: Set build outputs
+        id: build
+        run: |
+          echo "artifact-name=docs-${{ inputs.language }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      # Upload built docs
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.artifact-name }}
+          path: |
+            ${{ inputs.working-directory }}/docs/
+            ${{ inputs.working-directory }}/_site/
+            ${{ inputs.working-directory }}/public/
+            ${{ inputs.working-directory }}/site/
+          retention-days: 90
+
+  deploy:
+    name: Deploy Documentation
+    needs: build-docs
+    runs-on: ubuntu-latest
+    outputs:
+      docs-url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - name: Download documentation artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-docs.outputs.artifact-name }}
+          path: ./docs
+
+      # Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        if: inputs.deploy-target == 'github-pages'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          destination_dir: ${{ inputs.language }}
+          cname: ${{ inputs.base-url }}
+
+      - name: Set GitHub Pages URL
+        if: inputs.deploy-target == 'github-pages'
+        id: gh-pages-url
+        run: |
+          if [ -n "${{ inputs.base-url }}" ]; then
+            echo "url=https://${{ inputs.base-url }}/${{ inputs.language }}" >> $GITHUB_OUTPUT
+          else
+            echo "url=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ inputs.language }}" >> $GITHUB_OUTPUT
+          fi
+
+      # Deploy to Netlify
+      - name: Deploy to Netlify
+        if: inputs.deploy-target == 'netlify' && secrets.NETLIFY_AUTH_TOKEN != ''
+        uses: netlify/actions/cli@master
+        with:
+          args: deploy --dir=./docs --prod
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Set Netlify URL
+        if: inputs.deploy-target == 'netlify'
+        id: netlify-url
+        run: |
+          echo "url=https://${{ secrets.NETLIFY_SITE_ID }}.netlify.app" >> $GITHUB_OUTPUT
+
+      # Deploy to Vercel
+      - name: Deploy to Vercel
+        if: inputs.deploy-target == 'vercel' && secrets.VERCEL_TOKEN != ''
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-args: '--prod'
+          working-directory: ./docs
+
+      # Deploy to S3
+      - name: Deploy to S3
+        if: inputs.deploy-target == 's3' && secrets.AWS_ACCESS_KEY_ID != ''
+        uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --delete
+        env:
+          AWS_S3_BUCKET: docs-${{ github.repository_owner }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SOURCE_DIR: './docs'
+          DEST_DIR: ${{ inputs.language }}
+
+      # Set final URL
+      - name: Set deployment URL
+        id: deploy
+        run: |
+          case "${{ inputs.deploy-target }}" in
+            github-pages)
+              echo "url=${{ steps.gh-pages-url.outputs.url }}" >> $GITHUB_OUTPUT
+              ;;
+            netlify)
+              echo "url=${{ steps.netlify-url.outputs.url }}" >> $GITHUB_OUTPUT
+              ;;
+            vercel)
+              echo "url=${{ inputs.base-url }}" >> $GITHUB_OUTPUT
+              ;;
+            s3)
+              echo "url=https://docs-${{ github.repository_owner }}.s3.amazonaws.com/${{ inputs.language }}" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      # Generate summary
+      - name: Generate summary
+        run: |
+          echo "# Documentation Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Language**: ${{ inputs.language }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target**: ${{ inputs.deploy-target }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Visit the documentation: [${{ steps.deploy.outputs.url }}](${{ steps.deploy.outputs.url }})" >> $GITHUB_STEP_SUMMARY

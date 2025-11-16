@@ -1,0 +1,236 @@
+name: Performance Issue
+description: Report a performance problem or suggest an optimization
+title: "[Performance]: "
+labels: ["performance", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a performance issue! Please provide detailed information to help us investigate.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following
+      options:
+        - label: I have searched existing performance issues
+          required: true
+        - label: I have profiled the issue to identify the bottleneck
+          required: false
+        - label: I have tested with the latest version
+          required: true
+
+  - type: dropdown
+    id: performance-type
+    attributes:
+      label: Performance Issue Type
+      description: What type of performance issue is this?
+      options:
+        - Slow Query Performance
+        - High Memory Usage
+        - High CPU Usage
+        - Slow API Response Time
+        - Slow Ingestion Rate
+        - Slow Cost Calculation
+        - Database Performance
+        - Network I/O
+        - Disk I/O
+        - Scaling Issue
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem
+      placeholder: |
+        Describe what operation is slow and how slow it is.
+
+        Example: "Cost calculation for 1 million records takes 30 minutes, expected <5 minutes"
+    validations:
+      required: true
+
+  - type: textarea
+    id: workload
+    attributes:
+      label: Workload Characteristics
+      description: Describe the workload when the issue occurs
+      placeholder: |
+        - Number of records: 1,000,000
+        - Time period: Last 30 days
+        - Number of providers: 3
+        - Number of models: 10
+        - Database size: 50GB
+        - Concurrent requests: 100
+    validations:
+      required: true
+
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Performance Metrics
+      description: Provide specific performance measurements
+      placeholder: |
+        Current performance:
+        - Operation time: 30 minutes
+        - CPU usage: 80%
+        - Memory usage: 8GB
+        - Database query time: 25 minutes
+
+        Expected performance:
+        - Operation time: <5 minutes
+        - CPU usage: <50%
+        - Memory usage: <2GB
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this performance issue?
+      placeholder: |
+        1. Ingest 1 million usage records
+        2. Run cost calculation: `llm-costops calculate --period last-30-days`
+        3. Observe slow performance
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Details
+      description: Hardware and deployment configuration
+      placeholder: |
+        Hardware:
+        - CPU: 8 cores
+        - RAM: 16GB
+        - Disk: SSD 500GB
+
+        Deployment:
+        - Mode: Standalone daemon
+        - Database: PostgreSQL 15
+        - Workers: 4
+
+        Configuration:
+        - Connection pool size: 20
+        - Batch size: 1000
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: LLM-CostOps Version
+      description: Output of `llm-costops --version`
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database Type
+      description: What database are you using?
+      options:
+        - SQLite
+        - PostgreSQL
+        - TimescaleDB
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: profiling
+    attributes:
+      label: Profiling Data
+      description: Have you profiled the issue? Share relevant data
+      placeholder: |
+        ```
+        # Flamegraph, perf output, or profiler results
+
+        Function                     Time    %
+        calculate_costs             1800s   60%
+        ├─ query_usage_records      1500s   50%
+        └─ apply_pricing_model       300s   10%
+        ```
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: database-explain
+    attributes:
+      label: Database Query Plan
+      description: EXPLAIN output for slow queries
+      placeholder: |
+        ```sql
+        EXPLAIN ANALYZE
+        SELECT * FROM usage_records
+        WHERE timestamp > NOW() - INTERVAL '30 days';
+
+        Seq Scan on usage_records (cost=0..10000 rows=100000)
+        Planning time: 0.5 ms
+        Execution time: 25000 ms
+        ```
+      render: sql
+    validations:
+      required: false
+
+  - type: textarea
+    id: optimization-ideas
+    attributes:
+      label: Optimization Ideas
+      description: Do you have ideas on how to fix this?
+      placeholder: |
+        Potential optimizations:
+        - Add database index on timestamp column
+        - Increase batch size from 1000 to 10000
+        - Use parallel processing for cost calculations
+        - Implement caching for pricing models
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is this performance issue?
+      options:
+        - Critical (System unusable at scale)
+        - High (Significantly impacts usability)
+        - Medium (Noticeable slowness)
+        - Low (Minor performance concern)
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current Workaround
+      description: Are you using any workarounds?
+      placeholder: |
+        Currently working around by:
+        - Processing in smaller batches
+        - Running during off-hours
+        - Using more powerful hardware
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to help optimize this?
+      options:
+        - label: I would be willing to submit a PR with performance improvements
+          required: false
+        - label: I can provide more profiling data if needed
+          required: false
+        - label: I can help test performance improvements
+          required: false

@@ -1,0 +1,336 @@
+name: TypeScript SDK - Security
+
+on:
+  schedule:
+    # Run every Monday at 9:00 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sdk/package.json'
+      - 'sdk/package-lock.json'
+
+defaults:
+  run:
+    working-directory: ./sdk
+
+jobs:
+  dependency-audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit (production)
+        id: audit-prod
+        run: |
+          echo "Running production dependency audit..."
+          npm audit --production --json > audit-prod.json || true
+
+          CRITICAL=$(cat audit-prod.json | jq '.metadata.vulnerabilities.critical // 0')
+          HIGH=$(cat audit-prod.json | jq '.metadata.vulnerabilities.high // 0')
+          MODERATE=$(cat audit-prod.json | jq '.metadata.vulnerabilities.moderate // 0')
+          LOW=$(cat audit-prod.json | jq '.metadata.vulnerabilities.low // 0')
+
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+          echo "moderate=$MODERATE" >> $GITHUB_OUTPUT
+          echo "low=$LOW" >> $GITHUB_OUTPUT
+
+          echo "### Production Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+          echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
+          echo "- Moderate: $MODERATE" >> $GITHUB_STEP_SUMMARY
+          echo "- Low: $LOW" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run npm audit (all dependencies)
+        id: audit-all
+        run: |
+          echo "Running full dependency audit..."
+          npm audit --json > audit-all.json || true
+
+          CRITICAL=$(cat audit-all.json | jq '.metadata.vulnerabilities.critical // 0')
+          HIGH=$(cat audit-all.json | jq '.metadata.vulnerabilities.high // 0')
+          MODERATE=$(cat audit-all.json | jq '.metadata.vulnerabilities.moderate // 0')
+          LOW=$(cat audit-all.json | jq '.metadata.vulnerabilities.low // 0')
+
+          echo "### All Dependencies (including dev)" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical: $CRITICAL" >> $GITHUB_STEP_SUMMARY
+          echo "- High: $HIGH" >> $GITHUB_STEP_SUMMARY
+          echo "- Moderate: $MODERATE" >> $GITHUB_STEP_SUMMARY
+          echo "- Low: $LOW" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for critical vulnerabilities
+        run: |
+          CRITICAL_PROD=${{ steps.audit-prod.outputs.critical }}
+          HIGH_PROD=${{ steps.audit-prod.outputs.high }}
+
+          if [[ $CRITICAL_PROD -gt 0 ]] || [[ $HIGH_PROD -gt 0 ]]; then
+            echo "::error::Found $CRITICAL_PROD critical and $HIGH_PROD high severity vulnerabilities in production dependencies"
+            cat audit-prod.json | jq '.vulnerabilities'
+            exit 1
+          fi
+
+      - name: Upload audit reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-reports
+          path: |
+            sdk/audit-prod.json
+            sdk/audit-all.json
+          retention-days: 30
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          config-file: './.github/dependency-review-config.yml'
+          base-ref: ${{ github.event.before }}
+          head-ref: ${{ github.sha }}
+          fail-on-severity: high
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, CC0-1.0, Unlicense
+
+  license-compliance:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install license-checker
+        run: npm install --no-save license-checker
+
+      - name: Check production licenses
+        run: |
+          echo "Checking production dependency licenses..."
+          npx license-checker --production --json > licenses-prod.json
+
+          # Allowed licenses
+          ALLOWED="MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;CC0-1.0;Unlicense"
+
+          npx license-checker \
+            --production \
+            --onlyAllow "$ALLOWED" \
+            --failOn "GPL;LGPL;AGPL;SSPL;CC-BY-NC" \
+            --summary
+
+      - name: Generate license report
+        run: |
+          echo "# License Compliance Report" > license-report.md
+          echo "" >> license-report.md
+          echo "## Production Dependencies" >> license-report.md
+          echo "" >> license-report.md
+          npx license-checker --production --markdown >> license-report.md
+
+          cat license-report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload license reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-reports
+          path: |
+            sdk/licenses-prod.json
+            sdk/license-report.md
+          retention-days: 30
+
+  supply-chain-security:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Verify package-lock.json integrity
+        run: |
+          echo "Verifying package-lock.json is up to date..."
+          npm ci
+          git diff --exit-code package-lock.json || {
+            echo "::error::package-lock.json is out of sync with package.json"
+            exit 1
+          }
+
+      - name: Check for deprecated packages
+        run: |
+          echo "Checking for deprecated packages..."
+          DEPRECATED=$(npm ls --parseable --depth=0 2>&1 | grep -i deprecated || true)
+          if [[ -n "$DEPRECATED" ]]; then
+            echo "::warning::Found deprecated packages:"
+            echo "$DEPRECATED"
+          fi
+
+      - name: Verify package checksums
+        run: |
+          echo "Verifying package checksums..."
+          npm install --dry-run
+
+      - name: Check for typosquatting
+        run: |
+          echo "Checking for potential typosquatting..."
+          npm ls --all --json > dependencies.json
+
+          # Check for suspicious package names
+          cat dependencies.json | jq -r '.. | .dependencies? | select(. != null) | keys[]' | sort -u | while read pkg; do
+            # Flag packages with suspicious patterns
+            if echo "$pkg" | grep -qE "(^@[a-z0-9-]+/[a-z0-9-]+|npm|node|js|typescript)" && \
+               echo "$pkg" | grep -qE "[0-9]{4,}|l1|1l|o0|0o"; then
+              echo "::warning::Potentially suspicious package name: $pkg"
+            fi
+          done
+
+  outdated-dependencies:
+    name: Outdated Dependencies Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for outdated dependencies
+        run: |
+          echo "# Outdated Dependencies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          npm outdated || true >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for major version updates
+        run: |
+          npm outdated --json > outdated.json || true
+
+          MAJOR_UPDATES=$(cat outdated.json | jq -r 'to_entries[] | select(.value.latest != .value.current) | .key' | wc -l)
+
+          if [[ $MAJOR_UPDATES -gt 0 ]]; then
+            echo "::notice::$MAJOR_UPDATES packages have major version updates available"
+          fi
+
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended,security-and-quality
+          config: |
+            paths:
+              - sdk/src
+            paths-ignore:
+              - sdk/node_modules
+              - sdk/dist
+              - sdk/tests
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: typescript-sdk
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [dependency-audit, license-compliance, supply-chain-security, outdated-dependencies, codeql-analysis]
+    timeout-minutes: 5
+
+    steps:
+      - name: Generate security summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # 🔒 TypeScript SDK Security Report
+
+          ## Job Results
+
+          - **Dependency Audit:** ${{ needs.dependency-audit.result }}
+          - **License Compliance:** ${{ needs.license-compliance.result }}
+          - **Supply Chain Security:** ${{ needs.supply-chain-security.result }}
+          - **Outdated Dependencies:** ${{ needs.outdated-dependencies.result }}
+          - **CodeQL Analysis:** ${{ needs.codeql-analysis.result }}
+
+          ## Recommendations
+
+          - Review and update outdated dependencies regularly
+          - Monitor security advisories for critical vulnerabilities
+          - Keep dependencies up to date with security patches
+          - Review license compliance for new dependencies
+
+          ---
+
+          Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+
+      - name: Check overall security status
+        run: |
+          if [[ "${{ needs.dependency-audit.result }}" != "success" ]] || \
+             [[ "${{ needs.license-compliance.result }}" != "success" ]] || \
+             [[ "${{ needs.supply-chain-security.result }}" != "success" ]]; then
+            echo "::error::Security checks failed. Please review the security report."
+            exit 1
+          fi

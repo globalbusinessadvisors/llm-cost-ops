@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Observability configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ObservabilityConfig {
     /// Metrics configuration
     pub metrics: MetricsConfig,
@@ -18,16 +19,6 @@ pub struct ObservabilityConfig {
     pub health: HealthConfig,
 }
 
-impl Default for ObservabilityConfig {
-    fn default() -> Self {
-        Self {
-            metrics: MetricsConfig::default(),
-            tracing: TracingConfig::default(),
-            logging: LoggingConfig::default(),
-            health: HealthConfig::default(),
-        }
-    }
-}
 
 /// Metrics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -369,8 +360,10 @@ impl TracingConfig {
         }
 
         if let Ok(endpoint) = std::env::var("OTLP_ENDPOINT") {
-            let mut otlp = OtlpConfig::default();
-            otlp.endpoint = endpoint;
+            let mut otlp = OtlpConfig {
+                endpoint,
+                ..Default::default()
+            };
 
             if let Ok(name) = std::env::var("OTEL_SERVICE_NAME") {
                 otlp.service_name = name;

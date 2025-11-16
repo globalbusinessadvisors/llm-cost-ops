@@ -1,0 +1,82 @@
+# Code Owners
+#
+# This file defines individuals or teams responsible for code in this repository.
+# Code owners are automatically requested for review when someone opens a pull request
+# that modifies code that they own.
+#
+# More info: https://help.github.com/articles/about-code-owners/
+
+# Default owners for everything in the repo
+* @maintainer-team
+
+# Core domain and business logic
+/src/domain/ @core-team @architecture-team
+/src/engine/ @core-team @calculation-team
+
+# API and service layer
+/src/api/ @api-team @backend-team
+/src/auth/ @security-team @backend-team
+
+# Storage and database
+/src/storage/ @database-team @backend-team
+/migrations/ @database-team
+/migrations_postgres/ @database-team
+
+# Forecasting and analytics
+/src/forecasting/ @data-science-team @analytics-team
+/src/export/ @analytics-team
+
+# Observability
+/src/observability/ @sre-team @observability-team
+/k8s/ @sre-team @devops-team
+
+# CLI and tools
+/src/cli/ @cli-team @ux-team
+/src/bin/ @cli-team
+
+# Ingestion and streaming
+/src/ingestion/ @ingestion-team @backend-team
+
+# Kubernetes and deployment
+/k8s/ @sre-team @devops-team
+/k8s/helm/ @sre-team @helm-team
+Dockerfile @sre-team @devops-team
+docker-compose.yml @sre-team @devops-team
+
+# CI/CD
+/.github/workflows/ @devops-team @ci-team
+/.github/actions/ @devops-team @ci-team
+
+# Documentation
+/docs/ @documentation-team
+README.md @documentation-team @maintainer-team
+CONTRIBUTING.md @documentation-team @community-team
+CODE_OF_CONDUCT.md @community-team @maintainer-team
+SECURITY.md @security-team @maintainer-team
+
+# Configuration
+Cargo.toml @maintainer-team
+Cargo.lock @maintainer-team
+rust-toolchain.toml @maintainer-team
+
+# Tests
+/tests/ @qa-team
+/benches/ @performance-team
+
+# Examples
+/examples/ @documentation-team @developer-experience-team
+
+# Scripts
+/scripts/ @devops-team
+
+# Governance and policies
+/docs/governance/ @maintainer-team @governance-team
+
+# GitHub issue and PR templates
+/.github/ISSUE_TEMPLATE/ @community-team
+/.github/PULL_REQUEST_TEMPLATE.md @community-team
+
+# Specific file ownership
+CHANGELOG.md @maintainer-team
+LICENSE @legal-team @maintainer-team
+SECURITY.md @security-team

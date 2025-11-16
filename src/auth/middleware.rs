@@ -96,8 +96,7 @@ async fn extract_auth_context<S: ApiKeyStore>(
     // Try JWT authentication first
     if let Some(auth_header) = headers.get("authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
-            if auth_str.starts_with("Bearer ") {
-                let token = &auth_str[7..];
+            if let Some(token) = auth_str.strip_prefix("Bearer ") {
                 return authenticate_jwt(token, auth_state).await;
             }
         }
@@ -114,8 +113,7 @@ async fn extract_auth_context<S: ApiKeyStore>(
     // Check Authorization header with "ApiKey" scheme
     if let Some(auth_header) = headers.get("authorization") {
         if let Ok(auth_str) = auth_header.to_str() {
-            if auth_str.starts_with("ApiKey ") {
-                let api_key = &auth_str[7..];
+            if let Some(api_key) = auth_str.strip_prefix("ApiKey ") {
                 return authenticate_api_key(api_key, auth_state).await;
             }
         }
@@ -132,7 +130,7 @@ async fn authenticate_jwt<S: ApiKeyStore>(
     let claims = auth_state
         .jwt_manager
         .validate_access_token(token)
-        .map_err(|e| AuthResponse::from_auth_error(e))?;
+        .map_err(AuthResponse::from_auth_error)?;
 
     Ok(AuthContext {
         organization_id: claims.org.clone(),
@@ -153,7 +151,7 @@ async fn authenticate_api_key<S: ApiKeyStore>(
         .api_key_store
         .verify(api_key, &auth_state.config.api_key.prefix)
         .await
-        .map_err(|e| AuthResponse::from_auth_error(e))?;
+        .map_err(AuthResponse::from_auth_error)?;
 
     Ok(AuthContext {
         organization_id: key_hash.organization_id.clone(),
