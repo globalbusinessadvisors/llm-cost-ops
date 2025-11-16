@@ -87,7 +87,7 @@ hyper = { version = "1.0", features = ["server", "http1", "http2"] }
 
 # Event Streaming
 async-nats = "0.33"
-redis = { version = "0.24", features = ["tokio-comp", "streams"] }
+redis = { version = "0.32", features = ["tokio-comp", "streams"] }
 
 # Retry & Resilience
 backoff = { version = "0.4", features = ["tokio"] }
