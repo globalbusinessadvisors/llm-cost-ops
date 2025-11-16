@@ -5,8 +5,12 @@ edition = "2021"
 rust-version = "1.91"
 authors = ["LLM DevOps Team"]
 license = "Apache-2.0"
+license-file = "LICENSE"
 description = "Cost operations platform for LLM deployments"
-repository = "https://github.com/llm-devops/llm-cost-ops"
+readme = "README.md"
+repository = "https://github.com/globalbusinessadvisors/llm-cost-ops"
+homepage = "https://github.com/globalbusinessadvisors/llm-cost-ops"
+documentation = "https://docs.rs/llm-cost-ops"
 keywords = ["llm", "cost", "operations", "monitoring"]
 categories = ["development-tools", "finance"]
 
