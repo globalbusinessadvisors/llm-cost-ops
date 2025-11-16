@@ -1,22 +1,42 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/llm-cost-ops",
-    "crates/llm-cost-ops-api",
-    "crates/llm-cost-ops-cli",
-    "crates/llm-cost-ops-sdk",
-    "crates/llm-cost-ops-compliance",
-]
-
-[workspace.package]
-authors = ["LLM DevOps Team"]
+[package]
+name = "llm-cost-ops"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.91"
+authors = ["LLM DevOps Team"]
 license = "Apache-2.0"
+description = "Cost operations platform for LLM deployments"
+readme = "README-crates.md"
 repository = "https://github.com/globalbusinessadvisors/llm-cost-ops"
 homepage = "https://github.com/globalbusinessadvisors/llm-cost-ops"
+documentation = "https://docs.rs/llm-cost-ops"
+keywords = ["llm", "cost", "operations", "monitoring"]
+categories = ["development-tools", "finance"]
+exclude = [
+    "node_modules/",
+    "website/",
+    "docs/",
+    ".github/",
+    ".claude-flow/",
+    "deployment/",
+    "tests/",
+    "benches/",
+    "sdk/",
+    "python-sdk/",
+    "scripts/",
+    "migrations_postgres/",
+    "*.md",
+    "!README-crates.md",
+    "*.yml",
+    "*.yaml",
+    "*.json",
+    "!.sqlx/**/*.json",
+    "*.toml",
+    "!Cargo.toml",
+    "!Cargo.lock",
+]
 
-[workspace.dependencies]
+[dependencies]
 # Async Runtime
 tokio = { version = "1.35", features = ["full"] }
 futures = "0.3"
@@ -113,6 +133,52 @@ bytes = "1.5"
 cron = "0.12"
 chrono-tz = "0.8"
 
+[dev-dependencies]
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+
+# Testing utilities
+tempfile = "3.8"
+tokio-test = "0.4"
+proptest = "1.4"
+mockall = "0.12"
+serial_test = "3.0"
+
+# Mock server for testing
+wiremock = "0.5"
+mockito = "1.2"
+
+# Snapshot testing
+insta = "1.34"
+
+# Test data generation
+fake = { version = "2.9", features = ["derive", "chrono"] }
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+rust_decimal_macros = "1.33"
+
+# HTTP testing
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+tower = { version = "0.4", features = ["util"] }
+
+# Assertions
+assert_matches = "1.5"
+pretty_assertions = "1.4"
+
+[features]
+default = ["sqlite"]
+sqlite = []
+postgres = []
+full = ["sqlite", "postgres"]
+
+[[bin]]
+name = "cost-ops"
+path = "src/bin/main.rs"
+
+[lib]
+name = "llm_cost_ops"
+path = "src/lib.rs"
+
 [profile.release]
 opt-level = 3
 lto = true
@@ -124,3 +190,11 @@ opt-level = 0
 
 [profile.test]
 opt-level = 1
+
+[[bench]]
+name = "cost_calculation"
+harness = false
+
+[[bench]]
+name = "engine_benchmarks"
+harness = false

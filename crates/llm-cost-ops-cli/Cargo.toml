@@ -1,0 +1,59 @@
+[package]
+name = "llm-cost-ops-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Command-line interface for LLM Cost Ops"
+readme = "README.md"
+documentation = "https://docs.rs/llm-cost-ops-cli"
+keywords = ["llm", "cost", "cli", "operations"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+# Internal dependencies
+llm-cost-ops = { version = "0.1.1", path = "../llm-cost-ops" }
+llm-cost-ops-api = { version = "0.1.0", path = "../llm-cost-ops-api" }
+llm-cost-ops-compliance = { version = "0.1.0", path = "../llm-cost-ops-compliance" }
+
+# Async Runtime
+tokio.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# CLI
+clap.workspace = true
+console.workspace = true
+indicatif.workspace = true
+
+# Database
+sqlx.workspace = true
+
+# Time & Date
+chrono.workspace = true
+
+# Error Handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging & Tracing
+tracing.workspace = true
+
+# Utilities
+uuid.workspace = true
+
+# Decimal precision for currency
+rust_decimal.workspace = true
+
+[lib]
+name = "llm_cost_ops_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cost-ops"
+path = "src/bin/main.rs"

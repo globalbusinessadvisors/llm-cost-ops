@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT * FROM pricing_tables\n            WHERE provider = ? AND model_name = ? AND effective_date <= ?\n            AND (end_date IS NULL OR end_date >= ?)\n            ORDER BY effective_date DESC\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "provider",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "model_name",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "effective_date",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "end_date",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "pricing_structure",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "currency",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "region",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b52595d8ed82a9fa4cda1912281ce9d702484c3a402ca52c1a9b7b1819f47c3c"
+}

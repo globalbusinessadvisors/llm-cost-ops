@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT * FROM cost_records WHERE usage_id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "usage_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "timestamp",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "provider",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "model_name",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "input_cost",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "output_cost",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "total_cost",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "currency",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "cost_model_id",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "pricing_structure",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "organization_id",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "tags",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "calculated_at",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 15,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f7f6763fdfc8518675cd193b9fdf23b7d33e0c8ca12d637a7b064714b0b58c74"
+}

@@ -1,0 +1,112 @@
+[package]
+name = "llm-cost-ops"
+version = "0.1.1"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Core library for cost operations on LLM deployments"
+readme = "README.md"
+documentation = "https://docs.rs/llm-cost-ops"
+keywords = ["llm", "cost", "operations", "monitoring"]
+categories = ["development-tools", "finance"]
+exclude = [
+    "node_modules/",
+    "website/",
+    "docs/",
+    ".github/",
+    ".claude-flow/",
+    "deployment/",
+    "tests/",
+    "benches/",
+    "sdk/",
+    "python-sdk/",
+    "scripts/",
+    "migrations_postgres/",
+    "*.md",
+    "!README.md",
+    "*.yml",
+    "*.yaml",
+    "*.json",
+    "!.sqlx/**/*.json",
+    "*.toml",
+    "!Cargo.toml",
+    "!Cargo.lock",
+]
+
+[dependencies]
+# Async Runtime
+tokio.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+
+# Database
+sqlx.workspace = true
+
+# Time & Date
+chrono.workspace = true
+
+# Error Handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging & Tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Metrics
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+prometheus.workspace = true
+
+# Utilities
+uuid.workspace = true
+url.workspace = true
+regex.workspace = true
+lazy_static.workspace = true
+once_cell.workspace = true
+
+# Compression
+flate2.workspace = true
+brotli.workspace = true
+http-body-util.workspace = true
+
+# Decimal precision for currency
+rust_decimal.workspace = true
+
+# Configuration
+config.workspace = true
+figment.workspace = true
+
+# HTTP Server & Client
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+reqwest.workspace = true
+
+# Export & Reporting
+csv.workspace = true
+rust_xlsxwriter.workspace = true
+lettre.workspace = true
+handlebars.workspace = true
+mime.workspace = true
+bytes.workspace = true
+cron.workspace = true
+chrono-tz.workspace = true
+
+[lib]
+name = "llm_cost_ops"
+path = "src/lib.rs"
+
+[features]
+default = ["sqlite"]
+sqlite = []
+postgres = []
+full = ["sqlite", "postgres"]

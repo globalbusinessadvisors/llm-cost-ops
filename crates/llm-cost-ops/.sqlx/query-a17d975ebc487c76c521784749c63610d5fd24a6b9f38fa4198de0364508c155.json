@@ -1,0 +1,146 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT * FROM usage_records WHERE id = ?\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "timestamp",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "provider",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "model_name",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "model_version",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "context_window",
+        "ordinal": 5,
+        "type_info": "Int64"
+      },
+      {
+        "name": "organization_id",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "user_id",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "prompt_tokens",
+        "ordinal": 9,
+        "type_info": "Int64"
+      },
+      {
+        "name": "completion_tokens",
+        "ordinal": 10,
+        "type_info": "Int64"
+      },
+      {
+        "name": "total_tokens",
+        "ordinal": 11,
+        "type_info": "Int64"
+      },
+      {
+        "name": "cached_tokens",
+        "ordinal": 12,
+        "type_info": "Int64"
+      },
+      {
+        "name": "reasoning_tokens",
+        "ordinal": 13,
+        "type_info": "Int64"
+      },
+      {
+        "name": "latency_ms",
+        "ordinal": 14,
+        "type_info": "Int64"
+      },
+      {
+        "name": "time_to_first_token_ms",
+        "ordinal": 15,
+        "type_info": "Int64"
+      },
+      {
+        "name": "tags",
+        "ordinal": 16,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 17,
+        "type_info": "Text"
+      },
+      {
+        "name": "ingested_at",
+        "ordinal": 18,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_type",
+        "ordinal": 19,
+        "type_info": "Text"
+      },
+      {
+        "name": "source_metadata",
+        "ordinal": 20,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 21,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a17d975ebc487c76c521784749c63610d5fd24a6b9f38fa4198de0364508c155"
+}
