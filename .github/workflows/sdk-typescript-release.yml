@@ -265,13 +265,13 @@ jobs:
           fetch-depth: 0
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: release-build
           path: sdk/dist
 
       - name: Download documentation
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: api-documentation
           path: sdk/docs/api

@@ -270,7 +270,7 @@ jobs:
       contents: read
     steps:
       - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: python-sdk-dist-${{ needs.validate.outputs.version }}
           path: dist/
@@ -311,19 +311,19 @@ jobs:
           fetch-depth: 0  # Fetch all history for changelog
 
       - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: python-sdk-dist-${{ needs.validate.outputs.version }}
           path: dist/
 
       - name: Download SBOM
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: sbom-${{ needs.validate.outputs.version }}
           path: sbom/
 
       - name: Download security reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: security-reports
           path: security/
