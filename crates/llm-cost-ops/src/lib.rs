@@ -12,6 +12,8 @@ pub mod metrics;
 pub mod compression;
 pub mod forecasting;
 pub mod export;
+pub mod benchmarks;
+pub mod adapters;
 
 // Re-export commonly used types
 pub use domain::{
@@ -84,6 +86,20 @@ pub use export::{
     ReportScheduler, CronScheduler, ScheduledReportStatus, ScheduledExecutionResult,
     // Errors
     ExportError, ExportResult,
+};
+
+pub use benchmarks::{
+    // Core functionality
+    run_all_benchmarks, run_category_benchmarks, run_quick_benchmark,
+    available_categories, targets_in_category,
+    // Types
+    BenchmarkResult, BenchmarkSummary,
+    BenchmarkIo, BenchmarkIoError,
+    MarkdownGenerator,
+};
+
+pub use adapters::{
+    BenchTarget, BenchmarkRegistry,
 };
 
 /// Library version

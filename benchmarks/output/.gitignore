@@ -1,0 +1,7 @@
+# Ignore all generated benchmark outputs
+*.json
+*.md
+
+# But keep directory structure
+!.gitkeep
+!.gitignore

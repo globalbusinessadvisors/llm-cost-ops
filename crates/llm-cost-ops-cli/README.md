@@ -18,6 +18,7 @@ A powerful, user-friendly CLI tool for managing LLM costs, generating reports, a
 - **Organization Management** - Manage organizations and permissions
 - **Server Management** - Start and manage API servers
 - **Interactive Mode** - REPL-style interactive shell
+- **Benchmarks** - Run performance benchmarks and generate reports
 
 ## Installation
 
@@ -363,6 +364,24 @@ cost-ops server health --url <url>
 # Generate config
 cost-ops server config --output config.toml
 ```
+
+### Benchmark Commands
+
+```bash
+# Run all benchmarks
+cost-ops run
+
+# Run with custom output directory
+cost-ops run --output ./my-benchmarks
+
+# Run specific benchmarks
+cost-ops run --filter cost_calculation
+
+# Skip summary report
+cost-ops run --no-summary
+```
+
+For detailed benchmark documentation, see [BENCHMARKS.md](BENCHMARKS.md).
 
 ## Configuration
 

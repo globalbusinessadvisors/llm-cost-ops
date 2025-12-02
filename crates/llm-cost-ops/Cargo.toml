@@ -101,6 +101,9 @@ bytes.workspace = true
 cron.workspace = true
 chrono-tz.workspace = true
 
+[dev-dependencies]
+tempfile = "3.8"
+
 [lib]
 name = "llm_cost_ops"
 path = "src/lib.rs"

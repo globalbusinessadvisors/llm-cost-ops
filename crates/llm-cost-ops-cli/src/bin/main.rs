@@ -6,7 +6,10 @@ use llm_cost_ops::{
     engine::{CostAggregator, CostCalculator},
     storage::{CostRepository, PricingRepository, UsageRepository},
 };
-use llm_cost_ops_cli::cli::{Cli, Commands, PricingCommands};
+use llm_cost_ops_cli::{
+    cli::{Cli, Commands, PricingCommands},
+    run_all_benchmarks,
+};
 use rust_decimal::Decimal;
 use sqlx::sqlite::SqlitePool;
 use std::str::FromStr;
@@ -59,6 +62,13 @@ async fn main() -> Result<()> {
         }
         Commands::Pricing { command } => {
             handle_pricing_command(&config, command).await?;
+        }
+        Commands::Run {
+            output,
+            no_summary,
+            filter,
+        } => {
+            run_benchmarks(output, !no_summary, filter.as_deref()).await?;
         }
     }
 
@@ -356,4 +366,21 @@ fn parse_time_range(range: &str) -> Result<(chrono::DateTime<Utc>, chrono::DateT
     };
 
     Ok((start, end))
+}
+
+async fn run_benchmarks(
+    output: &std::path::Path,
+    generate_summary: bool,
+    filter: Option<&str>,
+) -> Result<()> {
+    info!("Running benchmarks");
+
+    if let Some(filter) = filter {
+        info!("Applying filter: {}", filter);
+    }
+
+    run_all_benchmarks(output, generate_summary, filter).await?;
+
+    info!("Benchmark execution complete");
+    Ok(())
 }

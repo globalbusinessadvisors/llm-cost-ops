@@ -1,0 +1,92 @@
+================================================================================
+EXAMPLE: cost-ops run --help
+================================================================================
+
+Run benchmarks and generate performance reports
+
+Usage: cost-ops run [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>    Output directory for benchmark results [default: benchmarks/output]
+      --no-summary         Skip generating summary markdown report
+  -f, --filter <FILTER>    Benchmark filter (e.g., "cost_calculation", "aggregation")
+  -h, --help               Print help
+
+================================================================================
+EXAMPLE: cost-ops run
+================================================================================
+
+INFO Running benchmark: single_cost_calculation
+INFO Running benchmark: batch_cost_calculation_100
+INFO Running benchmark: batch_cost_calculation_1000
+INFO Running benchmark: batch_cost_calculation_10000
+INFO Running benchmark: cached_token_calculation
+INFO Running benchmark: cost_aggregation_100
+INFO Running benchmark: cost_aggregation_1000
+INFO Running benchmark: cost_aggregation_10000
+INFO Running benchmark: usage_validation
+INFO Running benchmark: multi_provider_openai
+INFO Running benchmark: multi_provider_anthropic
+INFO Running benchmark: multi_provider_googlevertexai
+INFO Running benchmark: multi_provider_azureopenai
+INFO Benchmark results written to: "benchmarks/output/raw/benchmark-results-20251202-103045.json"
+INFO Summary report written to: "benchmarks/output/summary.md"
+
+================================================================================
+BENCHMARK RESULTS SUMMARY
+================================================================================
+
+Version: 0.1.0
+Timestamp: 2025-12-02 10:30:45 UTC
+
+Overall Statistics:
+  Total Benchmarks: 13
+  Total Iterations: 140000
+  Total Duration: 1234.56 ms
+  Fastest: single_cost_calculation
+  Slowest: batch_cost_calculation_10000
+
+Top 5 Fastest Operations:
+  1. single_cost_calculation - 0.95 μs/op (1052631 ops/sec)
+  2. usage_validation - 1.23 μs/op (813008 ops/sec)
+  3. cached_token_calculation - 1.45 μs/op (689655 ops/sec)
+  4. multi_provider_openai - 1.67 μs/op (598802 ops/sec)
+  5. multi_provider_anthropic - 1.71 μs/op (584795 ops/sec)
+
+================================================================================
+
+INFO Benchmark execution complete
+
+================================================================================
+EXAMPLE: cost-ops run --filter aggregation
+================================================================================
+
+INFO Applying filter: aggregation
+INFO Running benchmark: cost_aggregation_100
+INFO Running benchmark: cost_aggregation_1000
+INFO Running benchmark: cost_aggregation_10000
+INFO Benchmark results written to: "benchmarks/output/raw/benchmark-results-20251202-103055.json"
+INFO Summary report written to: "benchmarks/output/summary.md"
+
+================================================================================
+BENCHMARK RESULTS SUMMARY
+================================================================================
+
+Version: 0.1.0
+Timestamp: 2025-12-02 10:30:55 UTC
+
+Overall Statistics:
+  Total Benchmarks: 3
+  Total Iterations: 30000
+  Total Duration: 456.78 ms
+  Fastest: cost_aggregation_100
+  Slowest: cost_aggregation_10000
+
+Top 5 Fastest Operations:
+  1. cost_aggregation_100 - 2.15 μs/op (465116 ops/sec)
+  2. cost_aggregation_1000 - 18.45 μs/op (54200 ops/sec)
+  3. cost_aggregation_10000 - 156.23 μs/op (6400 ops/sec)
+
+================================================================================
+
+INFO Benchmark execution complete

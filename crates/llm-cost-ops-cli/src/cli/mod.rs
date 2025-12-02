@@ -90,6 +90,21 @@ pub enum Commands {
         #[command(subcommand)]
         command: PricingCommands,
     },
+
+    /// Run benchmarks and generate performance reports
+    Run {
+        /// Output directory for benchmark results
+        #[arg(short, long, default_value = "benchmarks/output")]
+        output: PathBuf,
+
+        /// Skip generating summary markdown report
+        #[arg(long)]
+        no_summary: bool,
+
+        /// Benchmark filter (e.g., "cost_calculation", "aggregation")
+        #[arg(short, long)]
+        filter: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
