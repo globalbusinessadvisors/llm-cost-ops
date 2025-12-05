@@ -56,7 +56,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Metrics
 metrics = "0.21"
-metrics-exporter-prometheus = "0.12"
+metrics-exporter-prometheus = "0.18"
 prometheus = { version = "0.13", features = ["process"] }
 
 # Utilities
