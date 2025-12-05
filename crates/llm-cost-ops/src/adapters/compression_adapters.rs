@@ -4,7 +4,8 @@
 
 use super::{BenchTarget, calculate_stats, run_iterations};
 use crate::benchmarks::result::BenchmarkResult;
-use crate::compression::{Compressor, CompressionAlgorithm, CompressionLevel};
+use crate::compression::{CompressionAlgorithm, CompressionLevel};
+use crate::compression::codec::{GzipCompressor, BrotliCompressor, Compressor};
 
 /// Benchmark: Gzip compression
 pub struct GzipCompression {
@@ -45,19 +46,20 @@ impl BenchTarget for GzipCompression {
     }
 
     fn run(&self) -> BenchmarkResult {
-        let compressor = Compressor::new(CompressionAlgorithm::Gzip, self.level);
+        let compressor = GzipCompressor;
+        let level = self.level;
         let test_data = self.generate_test_data();
 
         let iterations = if self.data_size > 100_000 { 100 } else { 1000 };
 
         let (total_duration, timings) = run_iterations(iterations, || {
-            let _ = compressor.compress(&test_data);
+            let _ = compressor.compress(&test_data, level);
         });
 
         let (min, max, std_dev) = calculate_stats(&timings);
 
         // Calculate compression metadata
-        let compressed = compressor.compress(&test_data).unwrap_or_default();
+        let compressed = compressor.compress(&test_data, level).unwrap_or_default();
         let compression_ratio = if !compressed.is_empty() {
             test_data.len() as f64 / compressed.len() as f64
         } else {
@@ -122,18 +124,19 @@ impl BenchTarget for BrotliCompression {
     }
 
     fn run(&self) -> BenchmarkResult {
-        let compressor = Compressor::new(CompressionAlgorithm::Brotli, self.level);
+        let compressor = BrotliCompressor;
+        let level = self.level;
         let test_data = self.generate_test_data();
 
         let iterations = if self.data_size > 100_000 { 100 } else { 1000 };
 
         let (total_duration, timings) = run_iterations(iterations, || {
-            let _ = compressor.compress(&test_data);
+            let _ = compressor.compress(&test_data, level);
         });
 
         let (min, max, std_dev) = calculate_stats(&timings);
 
-        let compressed = compressor.compress(&test_data).unwrap_or_default();
+        let compressed = compressor.compress(&test_data, level).unwrap_or_default();
         let compression_ratio = if !compressed.is_empty() {
             test_data.len() as f64 / compressed.len() as f64
         } else {
@@ -197,11 +200,11 @@ impl BenchTarget for GzipDecompression {
     }
 
     fn run(&self) -> BenchmarkResult {
-        let compressor = Compressor::new(CompressionAlgorithm::Gzip, CompressionLevel::Default);
+        let compressor = GzipCompressor;
         let test_data = self.generate_test_data();
 
         // Pre-compress the data
-        let compressed = match compressor.compress(&test_data) {
+        let compressed = match compressor.compress(&test_data, CompressionLevel::Default) {
             Ok(data) => data,
             Err(e) => {
                 return BenchmarkResult::failure(

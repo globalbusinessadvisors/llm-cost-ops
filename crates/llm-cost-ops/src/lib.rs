@@ -14,6 +14,7 @@ pub mod forecasting;
 pub mod export;
 pub mod benchmarks;
 pub mod adapters;
+pub mod integrations;
 
 // Re-export commonly used types
 pub use domain::{

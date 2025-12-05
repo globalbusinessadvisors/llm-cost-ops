@@ -101,6 +101,10 @@ bytes.workspace = true
 cron.workspace = true
 chrono-tz.workspace = true
 
+# LLM-Dev-Ops Ecosystem Dependencies (Phase 2A compile-time only)
+llm-observatory-core.workspace = true
+llm-analytics-hub.workspace = true
+
 [dev-dependencies]
 tempfile = "3.8"
 

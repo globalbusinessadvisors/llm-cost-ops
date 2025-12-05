@@ -7,11 +7,15 @@ use crate::benchmarks::result::BenchmarkResult;
 use crate::domain::{ModelIdentifier, PricingStructure, PricingTable, Provider, UsageRecord, CostRecord, CostCalculation, Currency, IngestionSource};
 use crate::engine::{CostCalculator, TokenNormalizer, CostAggregator};
 use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 use std::str::FromStr;
 use std::time::Duration;
 use chrono::Utc;
 use uuid::Uuid;
+
+/// Helper macro replacement for creating Decimal values
+fn dec(value: &str) -> Decimal {
+    Decimal::from_str(value).unwrap_or(Decimal::ZERO)
+}
 
 // Helper function to create test usage
 fn create_test_usage(prompt_tokens: u64, completion_tokens: u64) -> UsageRecord {
@@ -43,7 +47,7 @@ fn create_test_pricing() -> PricingTable {
     PricingTable::new(
         Provider::OpenAI,
         "gpt-4".to_string(),
-        PricingStructure::simple_per_token(dec!(10.0), dec!(30.0)),
+        PricingStructure::simple_per_token(dec("10.0"), dec("30.0")),
     )
 }
 
@@ -53,8 +57,8 @@ fn create_test_cost() -> CostRecord {
         Provider::OpenAI,
         "gpt-4".to_string(),
         "org-test".to_string(),
-        CostCalculation::new(dec!(0.01), dec!(0.02), Currency::USD, Uuid::new_v4()),
-        PricingStructure::simple_per_token(dec!(10.0), dec!(30.0)),
+        CostCalculation::new(dec("0.01"), dec("0.02"), Currency::USD, Uuid::new_v4()),
+        PricingStructure::simple_per_token(dec("10.0"), dec("30.0")),
     )
 }
 
@@ -179,7 +183,7 @@ impl BenchTarget for CachedTokenCalculation {
         let pricing = PricingTable::new(
             Provider::Anthropic,
             "claude-3".to_string(),
-            PricingStructure::with_cache_discount(dec!(10.0), dec!(30.0), dec!(0.9)),
+            PricingStructure::per_token_with_cache(dec("10.0"), dec("30.0"), dec("0.9")),
         );
 
         let mut usage = create_test_usage(5000, 2000);

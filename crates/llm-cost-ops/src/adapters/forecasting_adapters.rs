@@ -5,27 +5,31 @@
 use super::{BenchTarget, calculate_stats, run_iterations};
 use crate::benchmarks::result::BenchmarkResult;
 use crate::forecasting::{
-    DataPoint, ForecastConfig, ForecastEngine, ForecastHorizon,
+    DataPoint, TimeSeriesData,
     LinearTrendModel, MovingAverageModel, ExponentialSmoothingModel,
     AnomalyDetector, AnomalyMethod, BudgetForecaster,
 };
+use crate::forecasting::anomaly::AnomalyConfig;
+use crate::forecasting::budget::BudgetConfig;
+use crate::forecasting::models::ForecastModel;
 use chrono::{Duration as ChronoDuration, Utc};
 use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
 
 /// Helper to generate test time series data
-fn generate_test_data(points: usize) -> Vec<DataPoint> {
+fn generate_test_data(points: usize) -> TimeSeriesData {
     let base_time = Utc::now() - ChronoDuration::days(points as i64);
 
-    (0..points)
+    let data_points: Vec<DataPoint> = (0..points)
         .map(|i| {
             let value = 100.0 + (i as f64 * 2.0) + (i as f64 * 0.1 * ((i as f64) / 10.0).sin());
-            DataPoint {
-                timestamp: base_time + ChronoDuration::days(i as i64),
-                value,
-            }
+            DataPoint::new(
+                base_time + ChronoDuration::days(i as i64),
+                Decimal::from_f64_retain(value).unwrap_or(Decimal::from(100)),
+            )
         })
-        .collect()
+        .collect();
+
+    TimeSeriesData::with_auto_interval(data_points)
 }
 
 /// Benchmark: Linear trend forecasting
@@ -54,15 +58,12 @@ impl BenchTarget for LinearTrendForecasting {
 
     fn run(&self) -> BenchmarkResult {
         let data = generate_test_data(self.data_points);
-        let model = LinearTrendModel::new();
-        let config = ForecastConfig {
-            horizon: ForecastHorizon::Days(7),
-            confidence_level: 0.95,
-        };
 
         let iterations = 1000;
         let (total_duration, timings) = run_iterations(iterations, || {
-            let _ = model.forecast(&data, &config);
+            let mut model = LinearTrendModel::new();
+            let _ = model.train(&data);
+            let _ = model.forecast(7);
         });
 
         let (min, max, std_dev) = calculate_stats(&timings);
@@ -113,15 +114,13 @@ impl BenchTarget for MovingAverageForecasting {
 
     fn run(&self) -> BenchmarkResult {
         let data = generate_test_data(self.data_points);
-        let model = MovingAverageModel::new(self.window_size);
-        let config = ForecastConfig {
-            horizon: ForecastHorizon::Days(7),
-            confidence_level: 0.95,
-        };
+        let window_size = self.window_size;
 
         let iterations = 1000;
         let (total_duration, timings) = run_iterations(iterations, || {
-            let _ = model.forecast(&data, &config);
+            let mut model = MovingAverageModel::new(window_size);
+            let _ = model.train(&data);
+            let _ = model.forecast(7);
         });
 
         let (min, max, std_dev) = calculate_stats(&timings);
@@ -171,15 +170,12 @@ impl BenchTarget for ExponentialSmoothingForecasting {
 
     fn run(&self) -> BenchmarkResult {
         let data = generate_test_data(self.data_points);
-        let model = ExponentialSmoothingModel::new(0.3); // alpha = 0.3
-        let config = ForecastConfig {
-            horizon: ForecastHorizon::Days(7),
-            confidence_level: 0.95,
-        };
 
         let iterations = 1000;
         let (total_duration, timings) = run_iterations(iterations, || {
-            let _ = model.forecast(&data, &config);
+            let mut model = ExponentialSmoothingModel::with_default_alpha();
+            let _ = model.train(&data);
+            let _ = model.forecast(7);
         });
 
         let (min, max, std_dev) = calculate_stats(&timings);
@@ -204,18 +200,18 @@ impl BenchTarget for ExponentialSmoothingForecasting {
 }
 
 /// Benchmark: Anomaly detection
-pub struct AnomalyDetection {
+pub struct AnomalyDetectionBench {
     data_points: usize,
     method: AnomalyMethod,
 }
 
-impl AnomalyDetection {
+impl AnomalyDetectionBench {
     pub fn new(data_points: usize, method: AnomalyMethod) -> Self {
         Self { data_points, method }
     }
 }
 
-impl BenchTarget for AnomalyDetection {
+impl BenchTarget for AnomalyDetectionBench {
     fn id(&self) -> String {
         format!("forecasting/anomaly_detection_{:?}_{}", self.method, self.data_points)
     }
@@ -230,11 +226,17 @@ impl BenchTarget for AnomalyDetection {
 
     fn run(&self) -> BenchmarkResult {
         let data = generate_test_data(self.data_points);
-        let detector = AnomalyDetector::new(self.method.clone());
+        let config = AnomalyConfig {
+            method: self.method,
+            sensitivity: 2.0,
+            min_data_points: 10,
+            window_size: 7,
+        };
+        let detector = AnomalyDetector::new(config);
 
         let iterations = 1000;
         let (total_duration, timings) = run_iterations(iterations, || {
-            let _ = detector.detect(&data, 2.0); // 2.0 standard deviations threshold
+            let _ = detector.detect(&data);
         });
 
         let (min, max, std_dev) = calculate_stats(&timings);
@@ -258,17 +260,17 @@ impl BenchTarget for AnomalyDetection {
 }
 
 /// Benchmark: Budget forecasting
-pub struct BudgetForecast {
+pub struct BudgetForecastBench {
     data_points: usize,
 }
 
-impl BudgetForecast {
+impl BudgetForecastBench {
     pub fn new(data_points: usize) -> Self {
         Self { data_points }
     }
 }
 
-impl BenchTarget for BudgetForecast {
+impl BenchTarget for BudgetForecastBench {
     fn id(&self) -> String {
         format!("forecasting/budget_forecast_{}", self.data_points)
     }
@@ -283,12 +285,20 @@ impl BenchTarget for BudgetForecast {
 
     fn run(&self) -> BenchmarkResult {
         let data = generate_test_data(self.data_points);
-        let forecaster = BudgetForecaster::new();
-        let monthly_budget = dec!(10000.0);
+        let config = BudgetConfig {
+            limit: Decimal::from(10000),
+            period_days: 30,
+            warning_threshold: 0.80,
+            critical_threshold: 0.95,
+            enable_forecasting: true,
+        };
+        let forecaster = BudgetForecaster::new(config);
+        let period_start = Utc::now() - ChronoDuration::days(self.data_points as i64);
+        let period_end = Utc::now() + ChronoDuration::days(30);
 
         let iterations = 1000;
         let (total_duration, timings) = run_iterations(iterations, || {
-            let _ = forecaster.forecast_budget(&data, monthly_budget);
+            let _ = forecaster.forecast(&data, period_start, period_end);
         });
 
         let (min, max, std_dev) = calculate_stats(&timings);
@@ -329,13 +339,13 @@ pub fn create_targets() -> Vec<Box<dyn BenchTarget>> {
         Box::new(ExponentialSmoothingForecasting::new(365)),
 
         // Anomaly detection
-        Box::new(AnomalyDetection::new(30, AnomalyMethod::ZScore)),
-        Box::new(AnomalyDetection::new(90, AnomalyMethod::ZScore)),
-        Box::new(AnomalyDetection::new(30, AnomalyMethod::IQR)),
-        Box::new(AnomalyDetection::new(90, AnomalyMethod::IQR)),
+        Box::new(AnomalyDetectionBench::new(30, AnomalyMethod::ZScore)),
+        Box::new(AnomalyDetectionBench::new(90, AnomalyMethod::ZScore)),
+        Box::new(AnomalyDetectionBench::new(30, AnomalyMethod::Iqr)),
+        Box::new(AnomalyDetectionBench::new(90, AnomalyMethod::Iqr)),
 
         // Budget forecasting
-        Box::new(BudgetForecast::new(30)),
-        Box::new(BudgetForecast::new(90)),
+        Box::new(BudgetForecastBench::new(30)),
+        Box::new(BudgetForecastBench::new(90)),
     ]
 }
