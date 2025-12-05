@@ -200,7 +200,7 @@ async fn bench_cached_token_calculation() -> Result<BenchmarkResult> {
     info!("Running benchmark: {}", name);
 
     let calculator = CostCalculator::new();
-    let pricing = PricingStructure::with_cache_discount(
+    let pricing = PricingStructure::per_token_with_cache(
         Decimal::from_str("10.0")?,
         Decimal::from_str("30.0")?,
         Decimal::from_str("0.9")?,
