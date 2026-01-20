@@ -18,7 +18,7 @@ pub use models::{
 pub use engine::{ForecastEngine, ForecastRequest};
 pub use metrics::{ForecastMetrics, calculate_mape, calculate_rmse, calculate_mae};
 pub use anomaly::{AnomalyDetector, AnomalyResult, AnomalyMethod};
-pub use budget::{BudgetForecaster, BudgetForecast, BudgetAlert, AlertSeverity};
+pub use budget::{BudgetForecaster, BudgetForecast, BudgetAlert, AlertSeverity, BudgetConfig};
 
 /// Forecasting error types
 #[derive(Debug, thiserror::Error)]

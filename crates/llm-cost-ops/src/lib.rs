@@ -15,6 +15,7 @@ pub mod export;
 pub mod benchmarks;
 pub mod adapters;
 pub mod integrations;
+pub mod agents;
 
 // Re-export commonly used types
 pub use domain::{
@@ -101,6 +102,19 @@ pub use benchmarks::{
 
 pub use adapters::{
     BenchTarget, BenchmarkRegistry,
+};
+
+pub use agents::{
+    // Contracts
+    AgentId, AgentVersion, DecisionType, DecisionEvent,
+    AgentClassification, ConstraintType, SignalType,
+    // RuVector Client
+    RuvectorClient, RuvectorConfig, RuvectorError,
+    // Budget Enforcement Agent
+    BudgetEnforcementAgent, BudgetEvaluationRequest, BudgetConstraintSignal,
+    BudgetEnforcementConfig, BudgetSignalSeverity, BudgetViolationType,
+    // Registry
+    AgentRegistry, AgentMetadata,
 };
 
 /// Library version

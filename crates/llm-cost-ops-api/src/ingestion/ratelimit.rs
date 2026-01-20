@@ -450,7 +450,7 @@ impl RateLimiter for RedisRateLimiter {
                 .map_err(|e| CostOpsError::Integration(format!("Redis zadd failed: {}", e)))?;
 
             // Set expiry on the key
-            let expiry = (config.window_duration.as_secs() + 60) as i64;
+            let expiry = (config.window_duration.as_secs() + 60) as usize;
             let _: () = con.expire(&key, expiry).await
                 .map_err(|e| CostOpsError::Integration(format!("Redis expire failed: {}", e)))?;
 

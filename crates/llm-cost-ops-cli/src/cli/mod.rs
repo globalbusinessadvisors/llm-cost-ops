@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 // CLI argument definitions for LLM Cost Operations
+// Export command types for main.rs
 
 #[derive(Parser)]
 #[command(name = "cost-ops")]
@@ -104,6 +105,117 @@ pub enum Commands {
         /// Benchmark filter (e.g., "cost_calculation", "aggregation")
         #[arg(short, long)]
         filter: Option<String>,
+    },
+
+    /// Agent operations (financial governance, cost analysis, forecasting)
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommands,
+    },
+
+    /// Start the HTTP server (for Cloud Run deployment)
+    Serve {
+        /// Host address to bind to
+        #[arg(long, default_value = "0.0.0.0")]
+        host: String,
+
+        /// Port to listen on (default: PORT env var or 8080)
+        #[arg(long, env = "PORT")]
+        port: Option<u16>,
+
+        /// Request timeout in seconds
+        #[arg(long, default_value = "30")]
+        request_timeout: u64,
+
+        /// Enable CORS
+        #[arg(long, default_value = "true")]
+        enable_cors: bool,
+    },
+}
+
+/// Agent subcommands
+#[derive(Subcommand)]
+pub enum AgentCommands {
+    /// Budget Enforcement Agent - Evaluate budget thresholds and emit advisory signals
+    #[command(name = "budget-enforcement")]
+    BudgetEnforcement {
+        #[command(subcommand)]
+        command: BudgetEnforcementCommands,
+    },
+
+    /// List available agents
+    List,
+
+    /// Get agent information
+    Info {
+        /// Agent ID
+        #[arg(long)]
+        agent_id: String,
+    },
+}
+
+/// Budget Enforcement Agent subcommands
+#[derive(Subcommand)]
+pub enum BudgetEnforcementCommands {
+    /// Analyze budget against current spend (CLI-invokable endpoint)
+    Analyze {
+        /// Tenant/organization ID
+        #[arg(long)]
+        tenant_id: String,
+
+        /// Budget ID
+        #[arg(long)]
+        budget_id: String,
+
+        /// Budget limit
+        #[arg(long)]
+        budget_limit: f64,
+
+        /// Budget currency
+        #[arg(long, default_value = "USD")]
+        currency: String,
+
+        /// Current spend
+        #[arg(long)]
+        current_spend: f64,
+
+        /// Execution reference ID (what triggered this evaluation)
+        #[arg(long)]
+        execution_ref: Option<String>,
+
+        /// Include forecast in evaluation
+        #[arg(long, default_value = "false")]
+        include_forecast: bool,
+
+        /// Warning threshold (0.0-1.0, default 0.80)
+        #[arg(long, default_value = "0.80")]
+        warning_threshold: f64,
+
+        /// Critical threshold (0.0-1.0, default 0.95)
+        #[arg(long, default_value = "0.95")]
+        critical_threshold: f64,
+
+        /// Output format (json, table)
+        #[arg(long, default_value = "json")]
+        output: String,
+
+        /// RuVector service endpoint (for persistence)
+        #[arg(long)]
+        ruvector_endpoint: Option<String>,
+
+        /// Dry run (don't persist)
+        #[arg(long, default_value = "false")]
+        dry_run: bool,
+    },
+
+    /// Inspect agent configuration
+    Inspect,
+
+    /// Get agent health status
+    Health {
+        /// Check RuVector connectivity
+        #[arg(long, default_value = "false")]
+        check_ruvector: bool,
     },
 }
 

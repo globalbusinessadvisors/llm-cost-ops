@@ -72,6 +72,13 @@ url.workspace = true
 regex.workspace = true
 lazy_static.workspace = true
 once_cell.workspace = true
+hex.workspace = true
+
+# Cryptography
+sha2.workspace = true
+
+# CLI
+clap.workspace = true
 
 # Compression
 flate2.workspace = true
@@ -107,6 +114,7 @@ llm-analytics-hub.workspace = true
 
 [dev-dependencies]
 tempfile = "3.8"
+rust_decimal_macros.workspace = true
 
 [lib]
 name = "llm_cost_ops"

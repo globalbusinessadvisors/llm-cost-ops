@@ -1,0 +1,48 @@
+# Ignore for gcloud builds submit and Cloud Run deploy
+# Exclude large directories that aren't needed for build
+
+# Google Cloud SDK (installed locally for CLI)
+google-cloud-sdk/
+
+# Node modules (not needed for Rust build)
+node_modules/
+
+# Target directory (Rust build artifacts)
+target/
+
+# Git directory
+.git/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Documentation and non-essential files
+docs/
+*.md
+!README.md
+
+# Test data and metrics (only at root level, not in source)
+/metrics/
+benchmarks/output/
+
+# Local development files
+.env
+.env.local
+*.local
+
+# Claude flow data
+.claude-flow/
+.claude/
+.swarm/
+
+# Website (separate deployment)
+website/
+
+# Development containers
+.devcontainer/
+
+# macOS
+.DS_Store

@@ -1,0 +1,184 @@
+# Cloud Build configuration for LLM-CostOps
+# Deploys unified service to Google Cloud Run
+#
+# Trigger: Push to main branch or version tag
+# Target: Cloud Run (agentics-dev project)
+
+substitutions:
+  _SERVICE_NAME: llm-costops
+  _REGION: us-central1
+  _PROJECT_ID: agentics-dev
+  _ARTIFACT_REGISTRY: us-central1-docker.pkg.dev/agentics-dev/llm-devops
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+steps:
+  # Step 1: Run tests
+  - name: 'rust:1.75-slim'
+    id: 'test'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        apt-get update && apt-get install -y pkg-config libssl-dev libpq-dev libsqlite3-dev
+        cargo test --all-features --release
+
+  # Step 2: Run clippy linting
+  - name: 'rust:1.75-slim'
+    id: 'lint'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        apt-get update && apt-get install -y pkg-config libssl-dev libpq-dev libsqlite3-dev
+        rustup component add clippy
+        cargo clippy --all-targets --all-features -- -D warnings
+    waitFor: ['test']
+
+  # Step 3: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build'
+    args:
+      - 'build'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '-t'
+      - '${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:latest'
+      - '-f'
+      - 'deployment/gcp/Dockerfile.cloudrun'
+      - '.'
+    waitFor: ['lint']
+
+  # Step 4: Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push'
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}'
+    waitFor: ['build']
+
+  # Step 5: Deploy to Cloud Run (dev)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-dev'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}-dev'
+      - '--image'
+      - '${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+      - '--project'
+      - '${_PROJECT_ID}'
+      - '--platform'
+      - 'managed'
+      - '--no-allow-unauthenticated'
+      - '--service-account'
+      - 'llm-costops-sa@${_PROJECT_ID}.iam.gserviceaccount.com'
+      - '--set-env-vars'
+      - 'PLATFORM_ENV=dev,SERVICE_NAME=${_SERVICE_NAME},SERVICE_VERSION=${SHORT_SHA}'
+      - '--set-secrets'
+      - 'RUVECTOR_API_KEY=ruvector-api-key:latest,TELEMETRY_API_KEY=observatory-api-key:latest'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '10'
+      - '--timeout'
+      - '60s'
+      - '--concurrency'
+      - '80'
+      - '--ingress'
+      - 'internal'
+      - '--vpc-connector'
+      - 'agentics-vpc-connector'
+    waitFor: ['push']
+
+  # Step 6: Verify deployment health
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'verify-dev'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # Get service URL
+        SERVICE_URL=$$(gcloud run services describe ${_SERVICE_NAME}-dev \
+          --region=${_REGION} \
+          --project=${_PROJECT_ID} \
+          --format='value(status.url)')
+
+        # Get identity token
+        AUTH_TOKEN=$$(gcloud auth print-identity-token)
+
+        # Health check with retries
+        for i in 1 2 3 4 5; do
+          STATUS=$$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $$AUTH_TOKEN" \
+            "$$SERVICE_URL/health")
+
+          if [ "$$STATUS" = "200" ]; then
+            echo "Health check passed"
+            exit 0
+          fi
+
+          echo "Attempt $$i: Health check returned $$STATUS, retrying..."
+          sleep 10
+        done
+
+        echo "Health check failed after 5 attempts"
+        exit 1
+    waitFor: ['deploy-dev']
+
+# Deploy to staging on main branch
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-staging'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}-staging'
+      - '--image'
+      - '${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+      - '--project'
+      - '${_PROJECT_ID}'
+      - '--platform'
+      - 'managed'
+      - '--no-allow-unauthenticated'
+      - '--service-account'
+      - 'llm-costops-sa@${_PROJECT_ID}.iam.gserviceaccount.com'
+      - '--set-env-vars'
+      - 'PLATFORM_ENV=staging,SERVICE_NAME=${_SERVICE_NAME},SERVICE_VERSION=${SHORT_SHA}'
+      - '--set-secrets'
+      - 'RUVECTOR_API_KEY=ruvector-api-key:latest,TELEMETRY_API_KEY=observatory-api-key:latest'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '2'
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '20'
+      - '--timeout'
+      - '60s'
+      - '--concurrency'
+      - '100'
+      - '--ingress'
+      - 'internal'
+      - '--vpc-connector'
+      - 'agentics-vpc-connector'
+    waitFor: ['verify-dev']
+
+images:
+  - '${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:${SHORT_SHA}'
+  - '${_ARTIFACT_REGISTRY}/${_SERVICE_NAME}:latest'
+
+timeout: '1800s'

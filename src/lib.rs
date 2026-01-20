@@ -18,6 +18,7 @@ pub mod compression;
 pub mod api;
 pub mod forecasting;
 pub mod export;
+pub mod agents;
 
 // Re-export commonly used types
 pub use domain::{
@@ -119,6 +120,26 @@ pub use export::{
     ReportScheduler, CronScheduler, ScheduledReportStatus, ScheduledExecutionResult,
     // Errors
     ExportError, ExportResult,
+};
+
+pub use agents::{
+    // Agent framework
+    Agent, AgentClassification, AgentError,
+    // Contracts
+    AgentId, AgentVersion, DecisionEvent, DecisionType,
+    ConstraintApplied, ValidationError,
+    // Cost Forecasting Agent
+    CostForecastingAgent, CostForecastInput, CostForecastOutput,
+    ForecastProjection, RiskIndicator, RiskLevel,
+    // Infrastructure
+    RuVectorClient, RuVectorConfig, RuVectorError,
+    AgentTelemetry, TelemetryEvent, TelemetryEmitter,
+    // Edge Function
+    create_router as create_agent_router, create_app as create_agent_app,
+    EdgeFunctionState, ForecastRequest as AgentForecastRequest,
+    ForecastResponse as AgentForecastResponse,
+    // Registry
+    AgentRegistry, AgentRegistryEntry, global_registry,
 };
 
 /// Library version

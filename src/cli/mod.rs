@@ -1,6 +1,10 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+pub mod agent;
+
+pub use agent::{AgentCommands, ForecastArgs, InspectArgs, execute_agent_command};
+
 #[derive(Parser)]
 #[command(name = "cost-ops")]
 #[command(about = "LLM Cost Operations Platform", long_about = None)]
@@ -88,6 +92,15 @@ pub enum Commands {
         #[command(subcommand)]
         command: PricingCommands,
     },
+
+    /// Agent commands (forecast, analyze, inspect)
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommands,
+    },
+
+    /// Shortcut for agent forecast
+    Forecast(ForecastArgs),
 }
 
 #[derive(Subcommand)]

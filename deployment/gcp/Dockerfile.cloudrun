@@ -1,0 +1,71 @@
+# Dockerfile for LLM-CostOps Cloud Run Deployment
+# Optimized for Google Cloud Run with minimal footprint
+#
+# Architecture: Unified service exposing all CostOps agents
+# Target: Google Cloud Run (agentics-dev)
+
+# ============================================================================
+# Stage 1: Build Environment
+# ============================================================================
+FROM rust:latest AS builder
+
+# Install build dependencies (including clang for bindgen, cmake for rdkafka)
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libpq-dev \
+    libsqlite3-dev \
+    build-essential \
+    clang \
+    libclang-dev \
+    cmake \
+    libsasl2-dev \
+    libzstd-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Enable SQLx offline mode (uses cached queries from .sqlx directory)
+ENV SQLX_OFFLINE=true
+
+# Copy entire project for build
+COPY Cargo.toml ./
+COPY src ./src
+COPY crates ./crates
+
+# Build the application
+RUN cargo build --release --package llm-cost-ops-cli
+
+# Verify binary exists
+RUN test -f /build/target/release/cost-ops
+
+# ============================================================================
+# Stage 2: Runtime Environment (Distroless for minimal attack surface)
+# ============================================================================
+FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
+
+# Copy binary from builder
+COPY --from=builder /build/target/release/cost-ops /app/cost-ops
+
+# Copy CA certificates for TLS
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Set working directory
+WORKDIR /app
+
+# Cloud Run uses PORT environment variable
+ENV PORT=8080
+
+# Expose default port
+EXPOSE 8080
+
+# Health check endpoint is at /health
+# Cloud Run performs its own health checks
+
+# Run as non-root user (distroless default)
+USER nonroot:nonroot
+
+# Start the application
+# The binary reads PORT from environment
+ENTRYPOINT ["/app/cost-ops", "serve"]

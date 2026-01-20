@@ -40,3 +40,10 @@ package-lock.json
 
 # Metrics
 .claude-flow/metrics/
+
+# Claude Code / Claude Flow
+.claude/
+.claude-flow/
+.swarm/
+CLAUDE.md
+.mcp.json
