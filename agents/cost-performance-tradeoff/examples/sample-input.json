@@ -1,0 +1,170 @@
+{
+  "records": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "provider": "OpenAI",
+      "model": "gpt-4o",
+      "model_tier": "premium",
+      "cost": {
+        "cost_per_request_usd": 0.0150,
+        "cost_per_1k_tokens_usd": 5.00,
+        "total_cost_usd": 0.0150,
+        "token_count": 1500
+      },
+      "latency": {
+        "p50_ms": 800,
+        "p95_ms": 1200,
+        "p99_ms": 1500,
+        "avg_ms": 900,
+        "min_ms": 600,
+        "max_ms": 2000
+      },
+      "quality": {
+        "accuracy": 0.95,
+        "relevance": 0.92,
+        "coherence": 0.94,
+        "helpfulness": 0.93,
+        "composite_score": 0.935
+      },
+      "execution_id": "exec-001",
+      "tags": {"use_case": "code_generation"}
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "timestamp": "2024-01-15T10:35:00Z",
+      "provider": "OpenAI",
+      "model": "gpt-4o-mini",
+      "model_tier": "standard",
+      "cost": {
+        "cost_per_request_usd": 0.0003,
+        "cost_per_1k_tokens_usd": 0.15,
+        "total_cost_usd": 0.0003,
+        "token_count": 1200
+      },
+      "latency": {
+        "p50_ms": 300,
+        "p95_ms": 500,
+        "p99_ms": 700,
+        "avg_ms": 350,
+        "min_ms": 200,
+        "max_ms": 900
+      },
+      "quality": {
+        "accuracy": 0.82,
+        "relevance": 0.85,
+        "coherence": 0.88,
+        "helpfulness": 0.80,
+        "composite_score": 0.838
+      },
+      "execution_id": "exec-002",
+      "tags": {"use_case": "code_generation"}
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440003",
+      "timestamp": "2024-01-15T10:40:00Z",
+      "provider": "Anthropic",
+      "model": "claude-3-opus",
+      "model_tier": "flagship",
+      "cost": {
+        "cost_per_request_usd": 0.0750,
+        "cost_per_1k_tokens_usd": 15.00,
+        "total_cost_usd": 0.0750,
+        "token_count": 2500
+      },
+      "latency": {
+        "p50_ms": 1500,
+        "p95_ms": 2500,
+        "p99_ms": 3500,
+        "avg_ms": 1800,
+        "min_ms": 1000,
+        "max_ms": 4000
+      },
+      "quality": {
+        "accuracy": 0.97,
+        "relevance": 0.96,
+        "coherence": 0.98,
+        "helpfulness": 0.95,
+        "composite_score": 0.965
+      },
+      "execution_id": "exec-003",
+      "tags": {"use_case": "code_generation"}
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440004",
+      "timestamp": "2024-01-15T10:45:00Z",
+      "provider": "Anthropic",
+      "model": "claude-3-haiku",
+      "model_tier": "economy",
+      "cost": {
+        "cost_per_request_usd": 0.0001,
+        "cost_per_1k_tokens_usd": 0.025,
+        "total_cost_usd": 0.0001,
+        "token_count": 800
+      },
+      "latency": {
+        "p50_ms": 150,
+        "p95_ms": 250,
+        "p99_ms": 400,
+        "avg_ms": 180,
+        "min_ms": 100,
+        "max_ms": 500
+      },
+      "quality": {
+        "accuracy": 0.72,
+        "relevance": 0.75,
+        "coherence": 0.80,
+        "helpfulness": 0.70,
+        "composite_score": 0.743
+      },
+      "execution_id": "exec-004",
+      "tags": {"use_case": "code_generation"}
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440005",
+      "timestamp": "2024-01-15T10:50:00Z",
+      "provider": "Anthropic",
+      "model": "claude-3-sonnet",
+      "model_tier": "standard",
+      "cost": {
+        "cost_per_request_usd": 0.0030,
+        "cost_per_1k_tokens_usd": 3.00,
+        "total_cost_usd": 0.0030,
+        "token_count": 1000
+      },
+      "latency": {
+        "p50_ms": 400,
+        "p95_ms": 700,
+        "p99_ms": 1000,
+        "avg_ms": 500,
+        "min_ms": 300,
+        "max_ms": 1200
+      },
+      "quality": {
+        "accuracy": 0.88,
+        "relevance": 0.90,
+        "coherence": 0.92,
+        "helpfulness": 0.87,
+        "composite_score": 0.893
+      },
+      "execution_id": "exec-005",
+      "tags": {"use_case": "code_generation"}
+    }
+  ],
+  "analysis_scope": "model",
+  "weights": {
+    "cost": 0.40,
+    "latency": 0.30,
+    "quality": 0.30
+  },
+  "constraints": {
+    "max_cost_per_request_usd": 0.05,
+    "max_latency_p95_ms": 2000
+  },
+  "options": {
+    "include_diminishing_returns": true,
+    "include_pareto_frontier": true,
+    "include_recommendations": true,
+    "normalize_metrics": true
+  }
+}

@@ -1,0 +1,40 @@
+# Node.js dependencies
+node_modules/
+
+# TypeScript source (only deploy compiled JS)
+src/
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+__tests__/
+coverage/
+
+# Build artifacts
+*.log
+*.tgz
+
+# Development files
+tsconfig.json
+jest.config.js
+.eslintrc.js
+.prettierrc
+
+# Documentation
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,26 @@
+{
+  "requestId": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2025-01-20T18:00:00.000Z",
+  "usage": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4",
+    "inputTokens": 1000,
+    "outputTokens": 500,
+    "cachedTokens": 200,
+    "latencyMs": 1234
+  },
+  "pricingContext": {
+    "tier": "enterprise",
+    "currency": "USD"
+  },
+  "dimensions": {
+    "userId": "user-123",
+    "projectId": "proj-456",
+    "organizationId": "org-789",
+    "environment": "production",
+    "tags": {
+      "team": "ml-platform",
+      "feature": "chatbot"
+    }
+  }
+}

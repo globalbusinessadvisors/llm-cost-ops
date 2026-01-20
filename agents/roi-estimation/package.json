@@ -1,0 +1,98 @@
+{
+  "name": "@llm-costops/roi-estimation-agent",
+  "version": "1.0.0",
+  "description": "LLM-CostOps ROI Estimation Agent - Correlates cost with business/system outcomes for ROI analysis",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "import": "./dist/contracts/index.js"
+    },
+    "./engine": {
+      "types": "./dist/engine/index.d.ts",
+      "import": "./dist/engine/index.js"
+    },
+    "./services": {
+      "types": "./dist/services/index.d.ts",
+      "import": "./dist/services/index.js"
+    },
+    "./handlers": {
+      "types": "./dist/handlers/index.d.ts",
+      "import": "./dist/handlers/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "deploy": "gcloud functions deploy roi-estimation-agent --runtime nodejs20 --trigger-http --entry-point roiEstimationAgent --memory 256MB --timeout 60s",
+    "deploy:staging": "gcloud functions deploy roi-estimation-agent-staging --runtime nodejs20 --trigger-http --entry-point roiEstimationAgent --memory 256MB --timeout 60s",
+    "start:local": "npx @google-cloud/functions-framework --target=roiEstimationAgent --port=8081",
+    "prebuild": "npm run clean"
+  },
+  "keywords": [
+    "llm",
+    "cost",
+    "roi",
+    "analysis",
+    "costops",
+    "google-cloud-functions",
+    "agentics"
+  ],
+  "author": "LLM-CostOps Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.3.0",
+    "decimal.js": "^10.4.3",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@agentics-contracts/core": "^1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@agentics-contracts/core": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/cost-ops.git",
+    "directory": "agents/roi-estimation"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/cost-ops/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

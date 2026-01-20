@@ -47,3 +47,7 @@ package-lock.json
 .swarm/
 CLAUDE.md
 .mcp.json
+
+# Google Cloud SDK (local installation)
+google-cloud-sdk/
+google-cloud-cli-*.tar.gz
