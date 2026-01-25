@@ -19,6 +19,7 @@ pub mod api;
 pub mod forecasting;
 pub mod export;
 pub mod agents;
+pub mod governance;
 
 // Re-export commonly used types
 pub use domain::{
@@ -140,6 +141,26 @@ pub use agents::{
     ForecastResponse as AgentForecastResponse,
     // Registry
     AgentRegistry, AgentRegistryEntry, global_registry,
+};
+
+pub use governance::{
+    // Phase 4 Layer 1 - Governance & FinOps
+    // Constants
+    AGENT_PHASE, AGENT_LAYER, MAX_TOKENS, MAX_LATENCY_MS,
+    // Configuration
+    GovernanceConfig,
+    // Signal types
+    GovernanceDecisionEvent, GovernanceDecisionType,
+    CostRiskSignal, BudgetThresholdSignal, PolicyViolationSignal, ApprovalRequiredSignal,
+    GovernanceRiskLevel, ApprovalType, ViolationType,
+    // Signal emitters
+    CostSignalEmitter, PolicySignalEmitter, ApprovalSignalEmitter,
+    emit_cost_risk_signal, emit_budget_threshold_signal,
+    emit_policy_violation_signal, emit_approval_required_signal,
+    // Policy evaluation (analysis only - NO ENFORCEMENT)
+    PolicyEvaluator, PolicyRule, PolicyResult, PolicySeverity,
+    // Performance budgets
+    PerformanceBudget, PerformanceGuard, BudgetExceeded,
 };
 
 /// Library version
