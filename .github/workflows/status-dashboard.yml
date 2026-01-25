@@ -255,46 +255,15 @@ jobs:
           name: compatibility-matrix
           path: .
 
-      - name: Update README
-        run: |
-          # Check if README exists
-          if [ ! -f "README.md" ]; then
-            touch README.md
-          fi
-
-          # Create badges section
-          cat > badges.md << 'EOF'
-          ## SDK Status
-
-          ### Build Status
-          ![Python Build](https://github.com/${{ github.repository }}/blob/main/.github/badges/python-build.svg)
-          ![TypeScript Build](https://github.com/${{ github.repository }}/blob/main/.github/badges/typescript-build.svg)
-          ![Rust Build](https://github.com/${{ github.repository }}/blob/main/.github/badges/rust-build.svg)
-
-          ### Version
-          ![Python Version](https://github.com/${{ github.repository }}/blob/main/.github/badges/python-version.svg)
-          ![TypeScript Version](https://github.com/${{ github.repository }}/blob/main/.github/badges/typescript-version.svg)
-          ![Rust Version](https://github.com/${{ github.repository }}/blob/main/.github/badges/rust-version.svg)
-
-          EOF
-
-          # Insert or update badges section in README
-          if grep -q "## SDK Status" README.md; then
-            # Update existing section
-            sed -i '/## SDK Status/,/^##[^#]/{ /^##[^#]/!d; }' README.md
-            sed -i '/## SDK Status/r badges.md' README.md
-          else
-            # Add new section at the top
-            cat badges.md README.md > README.new.md
-            mv README.new.md README.md
-          fi
+      # NOTE: README update disabled - badges are maintained separately
+      # The main README.md has its own badge section with shields.io badges
 
       - name: Commit and push changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add .github/badges/ compatibility-matrix.md README.md
+          git add .github/badges/ compatibility-matrix.md
 
           if [ -n "$(git status --porcelain)" ]; then
             git commit -m "chore: update status dashboard and badges"

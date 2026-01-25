@@ -1,15 +1,3 @@
-## SDK Status
-
-### Build Status
-![Python Build](https://github.com/LLM-Dev-Ops/cost-ops/blob/main/.github/badges/python-build.svg)
-![TypeScript Build](https://github.com/LLM-Dev-Ops/cost-ops/blob/main/.github/badges/typescript-build.svg)
-![Rust Build](https://github.com/LLM-Dev-Ops/cost-ops/blob/main/.github/badges/rust-build.svg)
-
-### Version
-![Python Version](https://github.com/LLM-Dev-Ops/cost-ops/blob/main/.github/badges/python-version.svg)
-![TypeScript Version](https://github.com/LLM-Dev-Ops/cost-ops/blob/main/.github/badges/typescript-version.svg)
-![Rust Version](https://github.com/LLM-Dev-Ops/cost-ops/blob/main/.github/badges/rust-version.svg)
-
 # LLM-CostOps
 
 Enterprise-grade financial intelligence platform for LLM operations. Track tokens, forecast costs, attribute expenses, and optimize spend across multiple providers.
