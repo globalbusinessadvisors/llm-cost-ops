@@ -94,7 +94,7 @@ redis = { version = "0.23", features = ["tokio-comp", "streams"] }
 
 # Retry & Resilience
 backoff = { version = "0.4", features = ["tokio"] }
-deadpool = "0.10"
+deadpool = "0.12"
 
 # Validation
 validator = { version = "0.16", features = ["derive"] }
