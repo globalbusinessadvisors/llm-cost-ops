@@ -108,7 +108,7 @@ rand = "0.8"
 
 # Export & Reporting
 csv = "1.3"
-rust_xlsxwriter = "0.64"
+rust_xlsxwriter = "0.92"
 lettre = { version = "0.11", features = ["builder", "tokio1-native-tls", "smtp-transport"] }
 handlebars = "5.1"
 mime = "0.3"
